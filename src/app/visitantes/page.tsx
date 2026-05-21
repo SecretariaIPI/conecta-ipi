@@ -11,18 +11,16 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
 )
 
-type Visitante = {
+interface Visitante {
   id: string
   nome: string
-  telefone: string | null
-  email: string | null
-  sexo: string | null
-  faixa_etaria: string | null
-  cidade: string | null
-  data_visita: string | null
-  origem: string | null
-  pedido_oracao: string | null
-  created_at: string
+  telefone?: string
+  email?: string
+  cidade?: string
+  origem?: string
+  data_visita?: string
+  confirmou_cafe?: boolean
+}
 }
 
 export default function VisitantesPage() {
@@ -54,7 +52,7 @@ export default function VisitantesPage() {
       }
 
       setVisitantes(data || [])
-    } catch (err: any) {
+    } catch (err: visitante) {
       setErro(err.message || 'Erro desconhecido ao carregar dados.')
     } finally {
       setLoading(false)
@@ -100,7 +98,7 @@ export default function VisitantesPage() {
       }
 
       carregarVisitantes()
-    } catch (err: any) {
+    } catch (err: visitante) {
       alert('Erro ao tentar excluir o visitante: ' + err.message)
     }
   }
@@ -156,7 +154,7 @@ export default function VisitantesPage() {
 
       limparFormulario()
       carregarVisitantes()
-    } catch (err: any) {
+    } catch (err: visitante) {
       alert('Erro operacional no cadastro: ' + err.message)
     }
   }

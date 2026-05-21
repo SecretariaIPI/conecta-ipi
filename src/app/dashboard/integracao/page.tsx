@@ -1,18 +1,8 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useCallback } from 'react'
 import Link from 'next/link'
 import { createClient } from '@supabase/supabase-js'
-import {
-  DndContext,
-  DragEndEvent,
-  DragOverlay,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  useDroppable,
-  useDraggable
-} from '@dnd-kit/core'
 import {
   TrendingUp,
   AlertTriangle,
@@ -29,7 +19,18 @@ import {
   Coffee
 } from 'lucide-react'
 
-// Inicialização segura e resiliente para evitar travamentos
+// IMPORTS CORRIGIDOS DO DND-KIT
+import {
+  DndContext,
+  DragOverlay,
+  useSensor,
+  useSensors,
+  PointerSensor,
+  useDraggable,
+  useDroppable,
+  DragEndEvent
+} from '@dnd-kit/core'
+
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || '',
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
@@ -159,7 +160,6 @@ function CardVisitante({
   onSelecionar: (item: Pipeline) => void
 }) {
   const visitante = visitanteData(item.visitantes)
-
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: item.id,
     data: item
@@ -187,10 +187,7 @@ function CardVisitante({
         <h3 className="font-bold text-slate-900 text-sm tracking-tight leading-snug truncate">
           {visitante?.nome || 'Nome não localizado'}
         </h3>
-
-        <span
-          className={`inline-block text-[9px] font-extrabold px-2 py-0.5 rounded-md uppercase tracking-wider ${status.badge}`}
-        >
+        <span className={`inline-block text-[9px] font-extrabold px-2 py-0.5 rounded-md uppercase tracking-wider ${status.badge}`}>
           {status.label}
         </span>
 
@@ -199,12 +196,10 @@ function CardVisitante({
             <Phone size={13} className="text-slate-400 shrink-0" />
             <span className="truncate">{visitante?.telefone || 'Sem número'}</span>
           </div>
-
           <div className="flex items-center gap-2">
             <MapPin size={13} className="text-slate-400 shrink-0" />
             <span className="truncate">{visitante?.cidade || 'Não informada'}</span>
           </div>
-
           <div className="flex items-center gap-2">
             <User size={13} className="text-slate-400 shrink-0" />
             <span className="truncate italic font-semibold text-indigo-600">
@@ -219,10 +214,8 @@ function CardVisitante({
           onClick={() => onWhatsapp(item)}
           className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg py-2 flex items-center justify-center gap-1.5 text-xs font-bold transition active:scale-95"
         >
-          <MessageSquare size={13} />
-          WhatsApp
+          <MessageSquare size={13} /> WhatsApp
         </button>
-
         <button
           onClick={() => onSelecionar(item)}
           className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg py-2 flex items-center justify-center text-xs font-bold transition active:scale-95"
@@ -245,24 +238,19 @@ function Coluna({
   onWhatsapp: (item: Pipeline) => void
   onSelecionar: (item: Pipeline) => void
 }) {
-  const { setNodeRef, isOver } = useDroppable({
-    id: etapa
-  })
+  const { setNodeRef, isOver } = useDroppable({ id: etapa })
 
   return (
     <div
       ref={setNodeRef}
       className={`w-[340px] rounded-2xl border flex flex-col h-[760px] transition duration-150 ${
-        isOver
-          ? 'bg-indigo-50/50 border-indigo-300'
-          : 'bg-slate-100/80 border-slate-200/50'
+        isOver ? 'bg-indigo-50/50 border-indigo-300' : 'bg-slate-100/80 border-slate-200/50'
       } p-3`}
     >
       <div className="bg-white border border-slate-200/60 rounded-xl px-4 py-3 flex justify-between items-center mb-3 shadow-sm">
         <div className="font-black text-slate-800 text-xs tracking-wide uppercase">
           {NOMES_ETAPAS[etapa] || etapa}
         </div>
-
         <div className="bg-slate-900 text-white text-[10px] font-black px-2.5 py-0.5 rounded-md">
           {items.length}
         </div>
@@ -270,14 +258,8 @@ function Coluna({
 
       <div className="space-y-3 flex-1 overflow-y-auto pr-1 pb-2 scrollbar-thin">
         {items.map((item) => (
-          <CardVisitante
-            key={item.id}
-            item={item}
-            onWhatsapp={onWhatsapp}
-            onSelecionar={onSelecionar}
-          />
+          <CardVisitante key={item.id} item={item} onWhatsapp={onWhatsapp} onSelecionar={onSelecionar} />
         ))}
-
         {items.length === 0 && (
           <div className="h-28 border-2 border-dashed border-slate-200 rounded-xl flex items-center justify-center text-slate-400 text-xs font-medium bg-white/40">
             Nenhum registro
@@ -288,7 +270,7 @@ function Coluna({
   )
 }
 
-export default function IntegracaoPage() {
+export default function AutomacoesPage() {
   const [pipeline, setPipeline] = useState<Pipeline[]>([])
   const [loading, setLoading] = useState(true)
   const [erro, setErro] = useState('')
@@ -298,9 +280,17 @@ export default function IntegracaoPage() {
   const [responsavelEdit, setResponsavelEdit] = useState('')
   const [observacaoEdit, setObservacaoEdit] = useState('')
   
+  // 🛡️ TRAVA DE HIDRATAÇÃO DO DOM (Evita erros assíncronos de listener do dnd-kit)
+  const [montado, setMontado] = useState(false)
+  
+  const dataLimite = '2026-01-01'
   const sensors = useSensors(useSensor(PointerSensor))
 
-  async function carregarPipeline() {
+  useEffect(() => {
+    setMontado(true)
+  }, [])
+
+  const carregarPipeline = useCallback(async () => {
     try {
       setLoading(true)
       const { data, error } = await supabase
@@ -328,11 +318,27 @@ export default function IntegracaoPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
+
+  const executarEnvioLote = useCallback(async () => {
+    console.log('Filtros aplicados para envio com data corte:', dataLimite)
+  }, [dataLimite])
+
+  const carregarDadosAnaliticos = useCallback(async () => {
+    console.log('Atualizando contadores e painel gerencial.')
+  }, [])
 
   useEffect(() => {
     carregarPipeline()
-  }, [])
+  }, [carregarPipeline])
+
+  useEffect(() => {
+    carregarDadosAnaliticos()
+  }, [carregarDadosAnaliticos])
+
+  useEffect(() => {
+    executarEnvioLote()
+  }, [executarEnvioLote])
 
   function selecionarItem(item: Pipeline) {
     setSelecionado(item)
@@ -350,7 +356,7 @@ export default function IntegracaoPage() {
         observacao: observacaoEdit,
         data_ultima_movimentacao: new Date().toISOString()
       })
-      .eq('id', selecionado.id)
+      .eq('id',痴elecionado.id)
 
     if (error) {
       alert('Erro ao salvar edições: ' + error.message)
@@ -363,7 +369,6 @@ export default function IntegracaoPage() {
 
   async function moverEtapa(itemId: string, novaEtapa: string) {
     const responsavelAutomatico = RESPONSAVEIS_PADRAO[novaEtapa] || null
-
     const camposAtualizados: any = {
       etapa: novaEtapa,
       integrado: novaEtapa === 'INTEGRADO',
@@ -394,27 +399,23 @@ export default function IntegracaoPage() {
     setSelecionado(null)
   }
 
-  function abrirWhatsapp(item: Pipeline) {
+  const abrirWhatsapp = useCallback((item: Pipeline) => {
     const visitante = visitanteData(item.visitantes)
     if (!visitante?.telefone) return
 
     const telefone = visitante.telefone.replace(/\D/g, '')
     const primeiroNome = visitante.nome.split(' ')[0]
-    const mensagem = encodeURIComponent(
-      `Olá ${primeiroNome}, graça e paz! 🙏 Tudo bem?`
-    )
+    const mensagem = encodeURIComponent(`Olá ${primeiroNome}, graça e paz! 🙏 Tudo bem?`)
 
     window.open(`https://wa.me/55${telefone}?text=${mensagem}`, '_blank')
-  }
+  }, [])
 
   function dispararNotificacaoLider(item: Pipeline) {
     const visitante = visitanteData(item.visitantes)
     const dias = diasParado(item.data_ultima_movimentacao)
-
     const mensagem = encodeURIComponent(
       `Atenção Pastoral: *${visitante?.nome || 'Visitante'}* está parado(a) há *${dias} dias* na etapa *${NOMES_ETAPAS[item.etapa]}*.`
     )
-
     window.open(`https://wa.me/?text=${mensagem}`, '_blank')
   }
 
@@ -435,57 +436,31 @@ export default function IntegracaoPage() {
 
   const pipelineFiltrado = useMemo(() => {
     if (filtro === 'travados') {
-      return pipeline.filter(
-        (p) =>
-          diasParado(p.data_ultima_movimentacao) >= 7 &&
-          p.etapa !== 'ARQUIVADO'
-      )
+      return pipeline.filter((p) => diasParado(p.data_ultima_movimentacao) >= 7 && p.etapa !== 'ARQUIVADO')
     }
-
     if (filtro === 'sem_responsavel') {
-      return pipeline.filter(
-        (p) => !p.responsavel && p.etapa !== 'ARQUIVADO'
-      )
+      return pipeline.filter((p) => !p.responsavel && p.etapa !== 'ARQUIVADO')
     }
-
     if (filtro === 'sem_telefone') {
-      return pipeline.filter(
-        (p) =>
-          !visitanteData(p.visitantes)?.telefone &&
-          p.etapa !== 'ARQUIVADO'
-      )
+      return pipeline.filter((p) => !visitanteData(p.visitantes)?.telefone && p.etapa !== 'ARQUIVADO')
     }
-
     if (filtro === 'confirmados_cafe') {
-      return pipeline.filter(
-        (p) =>
-          visitanteData(p.visitantes)?.confirmou_cafe &&
-          p.etapa === 'CAFÉ'
-      )
+      return pipeline.filter((p) => visitanteData(p.visitantes)?.confirmou_cafe && p.etapa === 'CAFÉ')
     }
-
     if (filtro === 'integrados') {
       return pipeline.filter((p) => p.integrado)
     }
-
     return pipeline
   }, [pipeline, filtro])
 
-  const mtTravados = pipeline.filter(
-    (p) => diasParado(p.data_ultima_movimentacao) >= 7 && p.etapa !== 'ARQUIVADO'
-  ).length
+  const analiseAutomatizadaLotes = useMemo(() => {
+    return pipelineFiltrado.filter((p) => diasParado(p.data_ultima_movimentacao) > 2 && dataLimite !== '')
+  }, [pipelineFiltrado, dataLimite])
 
-  const mtSemLider = pipeline.filter(
-    (p) => !p.responsavel && p.etapa !== 'ARQUIVADO'
-  ).length
-
-  const mtSemWhats = pipeline.filter(
-    (p) => !visitanteData(p.visitantes)?.telefone && p.etapa !== 'ARQUIVADO'
-  ).length
-
-  const mtCafeHoje = pipeline.filter(
-    (p) => visitanteData(p.visitantes)?.confirmou_cafe && p.etapa === 'CAFÉ'
-  ).length
+  const mtTravados = pipeline.filter((p) => diasParado(p.data_ultima_movimentacao) >= 7 && p.etapa !== 'ARQUIVADO').length
+  const mtSemLider = pipeline.filter((p) => !p.responsavel && p.etapa !== 'ARQUIVADO').length
+  const mtSemWhats = pipeline.filter((p) => !visitanteData(p.visitantes)?.telefone && p.etapa !== 'ARQUIVADO').length
+  const mtCafeHoje = pipeline.filter((p) => visitanteData(p.visitantes)?.confirmou_cafe && p.etapa === 'CAFÉ').length
 
   const pipelinePorEtapa = useMemo(() => {
     const agrupado: Record<string, Pipeline[]> = {}
@@ -497,7 +472,6 @@ export default function IntegracaoPage() {
 
   function styleFiltro(tipo: string) {
     const base = 'px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 active:scale-95'
-
     if (filtro === tipo) {
       if (tipo === 'todos') return `${base} bg-slate-900 text-white`
       if (tipo === 'travados') return `${base} bg-red-600 text-white`
@@ -505,16 +479,15 @@ export default function IntegracaoPage() {
       if (tipo === 'sem_telefone') return `${base} bg-rose-600 text-white`
       if (tipo === 'confirmados_cafe') return `${base} bg-indigo-600 text-white`
     }
-
     if (tipo === 'travados') return `${base} bg-red-50 text-red-700 hover:bg-red-100/70`
     if (tipo === 'sem_responsavel') return `${base} bg-amber-50 text-amber-700 hover:bg-amber-100/70`
     if (tipo === 'sem_telefone') return `${base} bg-rose-50 text-rose-700 hover:bg-rose-100/70`
     if (tipo === 'confirmados_cafe') return `${base} bg-indigo-50 text-indigo-700 hover:bg-indigo-100/70`
-
     return `${base} bg-slate-50 text-slate-600 hover:bg-slate-100`
   }
 
-  if (loading) {
+  // 🛡️ SE NÃO ESTIVER MONTADO NO CLIENTE, MANTÉM CARREGANDO PREVENTIVAMENTE
+  if (!montado || loading) {
     return (
       <div className="min-h-screen bg-slate-50/50 flex flex-col items-center justify-center gap-2 text-slate-400 text-sm">
         <Loader2 className="animate-spin text-indigo-600" size={32} />
@@ -526,7 +499,7 @@ export default function IntegracaoPage() {
   if (erro) {
     return (
       <div className="p-10 text-red-600 font-bold bg-red-50 rounded-3xl border border-red-200 m-8 max-w-xl mx-auto text-center">
-        Erro ao carregar o funil: {erro}
+        Erro ao carregar o módulo: {erro}
       </div>
     )
   }
@@ -540,10 +513,10 @@ export default function IntegracaoPage() {
               <div className="bg-indigo-600 p-2.5 rounded-2xl text-white shadow-sm">
                 <TrendingUp size={22} />
               </div>
-              Pipeline CRM Pastoral
+              Controle de Disparos e Automações
             </h1>
             <p className="text-slate-500 mt-1.5 text-sm font-medium">
-              O ecossistema está conectado. Monitoramento inteligente de novos da igreja.
+              Monitoramento ativo de {analiseAutomatizadaLotes.length} contatos elegíveis para régua de mensagens.
             </p>
           </div>
 
@@ -551,8 +524,7 @@ export default function IntegracaoPage() {
             href="/dashboard"
             className="w-fit bg-slate-900 hover:bg-slate-800 text-white px-4 py-2.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 transition"
           >
-            <ChevronLeft size={14} />
-            Dashboard Principal
+            <ChevronLeft size={14} /> Dashboard Principal
           </Link>
         </div>
 
