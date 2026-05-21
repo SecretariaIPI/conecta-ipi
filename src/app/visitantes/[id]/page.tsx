@@ -495,17 +495,19 @@ function ChecklistIntegracaoComponent({
     participa_culto: false, participa_gc: false, integrado_gc: false,
     participou_cafe: false, novos_membros: false, material_recebido: false,
     batizado: false, membro: false, transferencia: false,
-    interesse_servir: false, encaminhado_ministerio: false, integrado_ministerio: false
+    interest_servir: false, encaminhado_ministerio: false, integrado_ministerio: false
   })
 
   useEffect(() => {
     async function carregarChecklist() {
       try {
-        let { data, error } = await supabase
+        const { data: dadosIniciais, error } = await supabase
           .from('visitantes_checklist')
           .select('*')
           .eq('visitante_id', visitanteId)
           .single()
+
+        let data = dadosIniciais
 
         if (error && error.code === 'PGRST116') {
           const { data: newData, error: createError } = await supabase
@@ -518,7 +520,7 @@ function ChecklistIntegracaoComponent({
         }
 
         if (data) {
-          const { id, visitante_id, updated_at, ...estados } = data
+          const { id: _id, visitante_id: _vId, updated_at: _uAt, ...estados } = data
           setChecklist(estados)
         }
       } catch (err) {
