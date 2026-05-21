@@ -29,9 +29,10 @@ import {
   Coffee
 } from 'lucide-react'
 
+// Inicialização segura e resiliente para evitar travamentos
 const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
 )
 
 const ETAPAS = [
@@ -64,6 +65,14 @@ const NOMES_ETAPAS: Record<string, string> = {
   ARQUIVADO: 'Arquivado 📂'
 }
 
+const RESPONSAVEIS_PADRAO: Record<string, string> = {
+  VISITOU: 'Secretária',
+  CONTATO: 'Pastor Cleber',
+  POSITIVO: 'Intercessão',
+  CAFÉ: 'Consolidação',
+  PARTICIPOU: 'Consolidação'
+}
+
 type Visitante = {
   id: string
   nome: string
@@ -92,9 +101,11 @@ function visitanteData(
 }
 
 function diasParado(data: string) {
+  if (!data) return 0
   const hoje = new Date()
   const ultima = new Date(data)
-  return Math.floor((hoje.getTime() - ultima.getTime()) / (1000 * 60 * 60 * 24))
+  const diferenca = hoje.getTime() - ultima.getTime()
+  return Math.max(0, Math.floor(diferenca / (1000 * 60 * 60 * 24)))
 }
 
 function statusVisual(dias: number) {
@@ -134,6 +145,7 @@ function statusVisual(dias: number) {
 }
 
 function formatarData(data: string) {
+  if (!data) return '-'
   return new Date(data).toLocaleString('pt-BR')
 }
 
@@ -167,7 +179,7 @@ function CardVisitante({
     <div
       ref={setNodeRef}
       style={style}
-      className={`${status.bg} ${status.border} border rounded-2xl p-4 shadow-2xs hover:shadow-xs transition bg-white space-y-3.5 ${
+      className={`${status.bg} ${status.border} border rounded-2xl p-4 shadow-sm hover:shadow-md transition bg-white space-y-3.5 ${
         isDragging ? 'opacity-40 cursor-grabbing' : ''
       }`}
     >
@@ -195,8 +207,8 @@ function CardVisitante({
 
           <div className="flex items-center gap-2">
             <User size={13} className="text-slate-400 shrink-0" />
-            <span className="truncate italic">
-              Líder: {item.responsavel || 'Nenhum'}
+            <span className="truncate italic font-semibold text-indigo-600">
+              Resp: {item.responsavel || 'Nenhum'}
             </span>
           </div>
         </div>
@@ -246,7 +258,7 @@ function Coluna({
           : 'bg-slate-100/80 border-slate-200/50'
       } p-3`}
     >
-      <div className="bg-white border border-slate-200/60 rounded-xl px-4 py-3 flex justify-between items-center mb-3 shadow-2xs">
+      <div className="bg-white border border-slate-200/60 rounded-xl px-4 py-3 flex justify-between items-center mb-3 shadow-sm">
         <div className="font-black text-slate-800 text-xs tracking-wide uppercase">
           {NOMES_ETAPAS[etapa] || etapa}
         </div>
@@ -279,6 +291,7 @@ function Coluna({
 export default function IntegracaoPage() {
   const [pipeline, setPipeline] = useState<Pipeline[]>([])
   const [loading, setLoading] = useState(true)
+  const [erro, setErro] = useState('')
   const [filtro, setFiltro] = useState('todos')
   const [activeItem, setActiveItem] = useState<Pipeline | null>(null)
   const [selecionado, setSelecionado] = useState<Pipeline | null>(null)
@@ -287,35 +300,39 @@ export default function IntegracaoPage() {
   
   const sensors = useSensors(useSensor(PointerSensor))
 
+  async function carregarPipeline() {
+    try {
+      setLoading(true)
+      const { data, error } = await supabase
+        .from('integracao_pipeline')
+        .select(`
+          *,
+          visitantes (
+            id,
+            nome,
+            telefone,
+            cidade,
+            confirmou_cafe
+          )
+        `)
+        .order('data_ultima_movimentacao', { ascending: false })
+
+      if (error) {
+        setErro(error.message)
+        return
+      }
+
+      setPipeline((data as Pipeline[]) || [])
+    } catch (err: any) {
+      setErro(err.message || 'Falha operacional de conexão.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   useEffect(() => {
     carregarPipeline()
   }, [])
-
-  async function carregarPipeline() {
-  const { data, error } = await supabase
-    .from('integracao_pipeline')
-    .select(`
-      *,
-      visitantes!integracao_pipeline_visitante_id_fkey (
-        id,
-        nome,
-        telefone,
-        cidade,
-        confirmou_cafe
-      )
-    `)
-    .order('data_ultima_movimentacao', { ascending: false })
-
-  console.log('PIPELINE >>>', data)
-  console.log('ERRO >>>', error)
-
-  if (error) {
-    console.error(error)
-    return
-  }
-
-  setPipeline(data || [])
-}
 
   function selecionarItem(item: Pipeline) {
     setSelecionado(item)
@@ -345,14 +362,26 @@ export default function IntegracaoPage() {
   }
 
   async function moverEtapa(itemId: string, novaEtapa: string) {
-    await supabase
+    const responsavelAutomatico = RESPONSAVEIS_PADRAO[novaEtapa] || null
+
+    const camposAtualizados: any = {
+      etapa: novaEtapa,
+      integrado: novaEtapa === 'INTEGRADO',
+      data_ultima_movimentacao: new Date().toISOString()
+    }
+
+    if (responsavelAutomatico) {
+      camposAtualizados.responsavel = responsavelAutomatico
+    }
+
+    const { error } = await supabase
       .from('integracao_pipeline')
-      .update({
-        etapa: novaEtapa,
-        integrado: novaEtapa === 'INTEGRADO',
-        data_ultima_movimentacao: new Date().toISOString()
-      })
+      .update(camposAtualizados)
       .eq('id', itemId)
+
+    if (error) {
+      alert('Erro ao mover de estágio: ' + error.message)
+    }
 
     carregarPipeline()
   }
@@ -367,7 +396,6 @@ export default function IntegracaoPage() {
 
   function abrirWhatsapp(item: Pipeline) {
     const visitante = visitanteData(item.visitantes)
-
     if (!visitante?.telefone) return
 
     const telefone = visitante.telefone.replace(/\D/g, '')
@@ -444,9 +472,7 @@ export default function IntegracaoPage() {
   }, [pipeline, filtro])
 
   const mtTravados = pipeline.filter(
-    (p) =>
-      diasParado(p.data_ultima_movimentacao) >= 7 &&
-      p.etapa !== 'ARQUIVADO'
+    (p) => diasParado(p.data_ultima_movimentacao) >= 7 && p.etapa !== 'ARQUIVADO'
   ).length
 
   const mtSemLider = pipeline.filter(
@@ -454,32 +480,23 @@ export default function IntegracaoPage() {
   ).length
 
   const mtSemWhats = pipeline.filter(
-    (p) =>
-      !visitanteData(p.visitantes)?.telefone &&
-      p.etapa !== 'ARQUIVADO'
+    (p) => !visitanteData(p.visitantes)?.telefone && p.etapa !== 'ARQUIVADO'
   ).length
 
   const mtCafeHoje = pipeline.filter(
-    (p) =>
-      visitanteData(p.visitantes)?.confirmou_cafe &&
-      p.etapa === 'CAFÉ'
+    (p) => visitanteData(p.visitantes)?.confirmou_cafe && p.etapa === 'CAFÉ'
   ).length
 
   const pipelinePorEtapa = useMemo(() => {
     const agrupado: Record<string, Pipeline[]> = {}
-
     ETAPAS.forEach((etapa) => {
-      agrupado[etapa] = pipelineFiltrado.filter(
-        (p) => p.etapa === etapa
-      )
+      agrupado[etapa] = pipelineFiltrado.filter((p) => p.etapa === etapa)
     })
-
     return agrupado
   }, [pipelineFiltrado])
 
   function styleFiltro(tipo: string) {
-    const base =
-      'px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 active:scale-95'
+    const base = 'px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 active:scale-95'
 
     if (filtro === tipo) {
       if (tipo === 'todos') return `${base} bg-slate-900 text-white`
@@ -489,21 +506,10 @@ export default function IntegracaoPage() {
       if (tipo === 'confirmados_cafe') return `${base} bg-indigo-600 text-white`
     }
 
-    if (tipo === 'travados') {
-      return `${base} bg-red-50 text-red-700 hover:bg-red-100/70`
-    }
-
-    if (tipo === 'sem_responsavel') {
-      return `${base} bg-amber-50 text-amber-700 hover:bg-amber-100/70`
-    }
-
-    if (tipo === 'sem_telefone') {
-      return `${base} bg-rose-50 text-rose-700 hover:bg-rose-100/70`
-    }
-
-    if (tipo === 'confirmados_cafe') {
-      return `${base} bg-indigo-50 text-indigo-700 hover:bg-indigo-100/70`
-    }
+    if (tipo === 'travados') return `${base} bg-red-50 text-red-700 hover:bg-red-100/70`
+    if (tipo === 'sem_responsavel') return `${base} bg-amber-50 text-amber-700 hover:bg-amber-100/70`
+    if (tipo === 'sem_telefone') return `${base} bg-rose-50 text-rose-700 hover:bg-rose-100/70`
+    if (tipo === 'confirmados_cafe') return `${base} bg-indigo-50 text-indigo-700 hover:bg-indigo-100/70`
 
     return `${base} bg-slate-50 text-slate-600 hover:bg-slate-100`
   }
@@ -512,9 +518,15 @@ export default function IntegracaoPage() {
     return (
       <div className="min-h-screen bg-slate-50/50 flex flex-col items-center justify-center gap-2 text-slate-400 text-sm">
         <Loader2 className="animate-spin text-indigo-600" size={32} />
-        <span className="font-semibold tracking-wide">
-          Alinhando automações de jornada...
-        </span>
+        <span className="font-semibold tracking-wide">Alinhando automações de jornada...</span>
+      </div>
+    )
+  }
+
+  if (erro) {
+    return (
+      <div className="p-10 text-red-600 font-bold bg-red-50 rounded-3xl border border-red-200 m-8 max-w-xl mx-auto text-center">
+        Erro ao carregar o funil: {erro}
       </div>
     )
   }
@@ -522,7 +534,6 @@ export default function IntegracaoPage() {
   return (
     <div className="min-h-screen bg-slate-50/50 p-4 sm:p-6 lg:p-8">
       <div className="max-w-[2400px] mx-auto space-y-8">
-
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-slate-200 pb-5 gap-4">
           <div>
             <h1 className="text-3xl font-black text-slate-900 flex items-center gap-3 tracking-tight">
@@ -531,7 +542,6 @@ export default function IntegracaoPage() {
               </div>
               Pipeline CRM Pastoral
             </h1>
-
             <p className="text-slate-500 mt-1.5 text-sm font-medium">
               O ecossistema está conectado. Monitoramento inteligente de novos da igreja.
             </p>
@@ -546,94 +556,54 @@ export default function IntegracaoPage() {
           </Link>
         </div>
 
-        {/* Linha dos Cards de Indicadores Estatísticos */}
+        {/* Indicadores */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="bg-white border border-red-200 rounded-2xl p-5 shadow-2xs flex items-center justify-between">
+          <div className="bg-white border border-red-200 rounded-2xl p-5 shadow-xs flex items-center justify-between">
             <div>
-              <p className="text-slate-400 text-[10px] font-bold uppercase tracking-wider">
-                🔥 Travados +7 dias
-              </p>
-              <h3 className="text-2xl font-black text-red-600 mt-0.5 tracking-tight">
-                {mtTravados}
-              </h3>
+              <p className="text-slate-400 text-[10px] font-bold uppercase tracking-wider">🔥 Travados +7 dias</p>
+              <h3 className="text-2xl font-black text-red-600 mt-0.5 tracking-tight">{mtTravados}</h3>
             </div>
-            <div className="p-3 bg-red-50 text-red-600 rounded-xl">
-              <AlertTriangle size={20} />
-            </div>
+            <div className="p-3 bg-red-50 text-red-600 rounded-xl"><AlertTriangle size={20} /></div>
           </div>
 
-          <div className="bg-white border border-amber-200 rounded-2xl p-5 shadow-2xs flex items-center justify-between">
+          <div className="bg-white border border-amber-200 rounded-2xl p-5 shadow-xs flex items-center justify-between">
             <div>
-              <p className="text-slate-400 text-[10px] font-bold uppercase tracking-wider">
-                ⚠ Sem Responsável
-              </p>
-              <h3 className="text-2xl font-black text-amber-600 mt-0.5 tracking-tight">
-                {mtSemLider}
-              </h3>
+              <p className="text-slate-400 text-[10px] font-bold uppercase tracking-wider">⚠ Sem Responsável</p>
+              <h3 className="text-2xl font-black text-amber-600 mt-0.5 tracking-tight">{mtSemLider}</h3>
             </div>
-            <div className="p-3 bg-amber-50 text-amber-600 rounded-xl">
-              <User size={20} />
-            </div>
+            <div className="p-3 bg-amber-50 text-amber-600 rounded-xl"><User size={20} /></div>
           </div>
 
-          <div className="bg-white border border-rose-200 rounded-2xl p-5 shadow-2xs flex items-center justify-between">
+          <div className="bg-white border border-rose-200 rounded-2xl p-5 shadow-xs flex items-center justify-between">
             <div>
-              <p className="text-slate-400 text-[10px] font-bold uppercase tracking-wider">
-                📵 Sem Telefone
-              </p>
-              <h3 className="text-2xl font-black text-rose-600 mt-0.5 tracking-tight">
-                {mtSemWhats}
-              </h3>
+              <p className="text-slate-400 text-[10px] font-bold uppercase tracking-wider">📵 Sem Telefone</p>
+              <h3 className="text-2xl font-black text-rose-600 mt-0.5 tracking-tight">{mtSemWhats}</h3>
             </div>
-            <div className="p-3 bg-rose-50 text-rose-600 rounded-xl">
-              <PhoneOff size={20} />
-            </div>
+            <div className="p-3 bg-rose-50 text-rose-600 rounded-xl"><PhoneOff size={20} /></div>
           </div>
 
-          <div className="bg-white border border-indigo-200 rounded-2xl p-5 shadow-2xs flex items-center justify-between">
+          <div className="bg-white border border-indigo-200 rounded-2xl p-5 shadow-xs flex items-center justify-between">
             <div>
-              <p className="text-slate-400 text-[10px] font-bold uppercase tracking-wider">
-                ☕ Confirmados Café
-              </p>
-              <h3 className="text-2xl font-black text-indigo-600 mt-0.5 tracking-tight">
-                {mtCafeHoje}
-              </h3>
+              <p className="text-slate-400 text-[10px] font-bold uppercase tracking-wider">☕ Confirmados Café</p>
+              <h3 className="text-2xl font-black text-indigo-600 mt-0.5 tracking-tight">{mtCafeHoje}</h3>
             </div>
-            <div className="p-3 bg-indigo-50 text-indigo-600 rounded-xl">
-              <Coffee size={20} />
-            </div>
+            <div className="p-3 bg-indigo-50 text-indigo-600 rounded-xl"><Coffee size={20} /></div>
           </div>
         </div>
 
-        {/* Barra de Seleção de Filtros Rápidos */}
-        <div className="bg-white rounded-2xl border border-slate-200/60 shadow-2xs p-4 flex flex-wrap items-center gap-3">
+        {/* Filtros */}
+        <div className="bg-white rounded-2xl border border-slate-200/60 shadow-xs p-4 flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-1.5 text-slate-400 font-bold text-xs uppercase tracking-wider pr-2">
-            <Filter size={14} />
-            Visão Rápida:
+            <Filter size={14} />Visão Rápida:
           </div>
-
-          <button onClick={() => setFiltro('todos')} className={styleFiltro('todos')}>
-            Todos os Registros
-          </button>
-
-          <button onClick={() => setFiltro('travados')} className={styleFiltro('travados')}>
-            🔥 Só Travados
-          </button>
-
-          <button onClick={() => setFiltro('sem_responsavel')} className={styleFiltro('sem_responsavel')}>
-            👤 Sem Líder
-          </button>
-
-          <button onClick={() => setFiltro('sem_telefone')} className={styleFiltro('sem_telefone')}>
-            📵 Sem Whats
-          </button>
-
-          <button onClick={() => setFiltro('confirmados_cafe')} className={styleFiltro('confirmados_cafe')}>
-            ☕ Confirmados Café
-          </button>
+          <button onClick={() => setFiltro('todos')} className={styleFiltro('todos')}>Todos os Registros</button>
+          <button onClick={() => setFiltro('travados')} className={styleFiltro('travados')}>🔥 Só Travados</button>
+          <button onClick={() => setFiltro('sem_responsavel')} className={styleFiltro('sem_responsavel')}>👤 Sem Líder</button>
+          <button onClick={() => setFiltro('sem_telefone')} className={styleFiltro('sem_telefone')}>📵 Sem Whats</button>
+          <button onClick={() => setFiltro('confirmados_cafe')} className={styleFiltro('confirmados_cafe')}>☕ Confirmados Café</button>
         </div>
 
-        {/* Contexto de Arrastar e Soltar (Kanban Board) */}
+        {/* Kanban Board */}
         <DndContext
           sensors={sensors}
           onDragStart={(event) => {
@@ -663,18 +633,16 @@ export default function IntegracaoPage() {
                   <h3 className="font-bold text-slate-900 text-sm">
                     {visitanteData(activeItem.visitantes)?.nome || 'Visitante'}
                   </h3>
-                  <div className="text-xs text-indigo-600 font-medium">
-                    Movendo entre estágios...
-                  </div>
+                  <div className="text-xs text-indigo-600 font-medium">Movendo entre estágios...</div>
                 </div>
               </div>
             ) : null}
           </DragOverlay>
         </DndContext>
 
-        {/* Menu Lateral de Detalhes e Ações Pastorais */}
+        {/* Drawer Lateral */}
         {selecionado && (
-          <div className="fixed inset-0 bg-slate-950/40 backdrop-blur-2xs z-50 flex justify-end">
+          <div className="fixed inset-0 bg-slate-950/40 backdrop-blur-xs z-50 flex justify-end">
             <div className="w-[520px] h-full bg-white shadow-2xl p-6 flex flex-col justify-between overflow-y-auto border-l border-slate-100">
               <div className="space-y-6">
                 <div className="flex justify-between items-center border-b border-slate-200 pb-4">
@@ -682,36 +650,37 @@ export default function IntegracaoPage() {
                     <h2 className="text-xl font-black text-slate-900 tracking-tight">
                       {visitanteData(selecionado.visitantes)?.nome}
                     </h2>
-                    <p className="text-xs text-slate-500 mt-0.5 font-medium">
-                      Acompanhamento Pastoral Individual
-                    </p>
+                    <p className="text-xs text-slate-500 mt-0.5 font-medium">Acompanhamento Pastoral Individual</p>
                   </div>
-
-                  <button
-                    onClick={() => setSelecionado(null)}
-                    className="text-slate-400 hover:text-slate-600 bg-slate-50 p-2 rounded-xl transition"
-                  >
+                  <button onClick={() => setSelecionado(null)} className="text-slate-400 hover:text-slate-600 bg-slate-50 p-2 rounded-xl transition">
                     <X size={16} />
                   </button>
                 </div>
 
                 <div className="space-y-4">
                   <div>
-                    <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-                      Líder Responsável
-                    </label>
+                    <div className="flex justify-between items-center">
+                      <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Líder Responsável</label>
+                      {RESPONSAVEIS_PADRAO[selecionado.etapa] && (
+                        <button
+                          type="button"
+                          onClick={() => setResponsavelEdit(RESPONSAVEIS_PADRAO[selecionado.etapa])}
+                          className="text-[10px] bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded font-bold transition"
+                        >
+                          ✨ Sugerir: {RESPONSAVEIS_PADRAO[selecionado.etapa]}
+                        </button>
+                      )}
+                    </div>
                     <input
                       value={responsavelEdit}
                       onChange={(e) => setResponsavelEdit(e.target.value)}
                       className="mt-1.5 w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:bg-white focus:border-indigo-600 transition font-medium"
-                      placeholder="Atribuir líder..."
+                      placeholder={RESPONSAVEIS_PADRAO[selecionado.etapa] || "Atribuir líder..."}
                     />
                   </div>
 
                   <div>
-                    <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-                      Observações Pastorais
-                    </label>
+                    <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Observações Pastorais</label>
                     <textarea
                       value={observacaoEdit}
                       onChange={(e) => setObservacaoEdit(e.target.value)}
@@ -722,12 +691,8 @@ export default function IntegracaoPage() {
                   </div>
                 </div>
 
-                {/* Linha do Tempo Espiritual interna da gaveta */}
                 <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4 space-y-3">
-                  <h3 className="font-bold text-xs uppercase tracking-wider text-slate-400">
-                    Histórico de Jornada
-                  </h3>
-
+                  <h3 className="font-bold text-xs uppercase tracking-wider text-slate-400">Histórico de Jornada</h3>
                   <div className="space-y-2.5 max-h-[220px] overflow-y-auto pr-1 scrollbar-thin">
                     {ETAPAS.map((etapa) => {
                       const ativo = etapa === selecionado.etapa
@@ -741,7 +706,6 @@ export default function IntegracaoPage() {
                               {NOMES_ETAPAS[etapa] || etapa}
                             </span>
                           </div>
-
                           {ativo && (
                             <span className="text-[10px] bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-md font-bold">
                               Modificado: {formatarData(selecionado.data_ultima_movimentacao)}
@@ -755,34 +719,16 @@ export default function IntegracaoPage() {
               </div>
 
               <div className="border-t border-slate-200 pt-5 space-y-3">
-                <button
-                  onClick={salvarEdicao}
-                  className="w-full bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl py-3 text-sm font-extrabold flex items-center justify-center gap-2 transition active:scale-95"
-                >
-                  <Save size={16} />
-                  Salvar Ajustes
+                <button onClick={salvarEdicao} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl py-3 text-sm font-extrabold flex items-center justify-center gap-2 transition active:scale-95">
+                  <Save size={16} />Salvar Ajustes
                 </button>
-
-                <button
-                  onClick={() => abrirWhatsapp(selecionado)}
-                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl py-3 text-sm font-extrabold flex items-center justify-center gap-2 transition active:scale-95"
-                >
-                  <MessageSquare size={16} />
-                  Contatar pelo WhatsApp
+                <button onClick={() => abrirWhatsapp(selecionado)} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl py-3 text-sm font-extrabold flex items-center justify-center gap-2 transition active:scale-95">
+                  <MessageSquare size={16} />Contatar pelo WhatsApp
                 </button>
-
-                <button
-                  onClick={() => dispararNotificacaoLider(selecionado)}
-                  className="w-full bg-amber-500 hover:bg-amber-600 text-white rounded-xl py-3 text-sm font-extrabold flex items-center justify-center gap-2 transition active:scale-95"
-                >
-                  <AlertTriangle size={16} />
-                  Alertar Liderança
+                <button onClick={() => dispararNotificacaoLider(selecionado)} className="w-full bg-amber-500 hover:bg-amber-600 text-white rounded-xl py-3 text-sm font-extrabold flex items-center justify-center gap-2 transition active:scale-95">
+                  <AlertTriangle size={16} />Alertar Liderança
                 </button>
-
-                <button
-                  onClick={() => voltarEtapa(selecionado)}
-                  className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl py-3 text-sm font-extrabold transition active:scale-95"
-                >
+                <button onClick={() => voltarEtapa(selecionado)} className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl py-3 text-sm font-extrabold transition active:scale-95">
                   ⬅ Voltar Etapa
                 </button>
               </div>

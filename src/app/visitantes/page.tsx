@@ -5,9 +5,10 @@ import Link from 'next/link'
 import { createClient } from '@supabase/supabase-js'
 import { UserPlus, Trash2, Phone, MapPin, Eye } from 'lucide-react'
 
+// Inicialização segura e resiliente para o ambiente da Vercel
 const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
 )
 
 type Visitante = {
@@ -40,21 +41,24 @@ export default function VisitantesPage() {
   const [pedidoOracao, setPedidoOracao] = useState('')
 
   async function carregarVisitantes() {
-    setLoading(true)
+    try {
+      setLoading(true)
+      const { data, error } = await supabase
+        .from('visitantes')
+        .select('*')
+        .order('created_at', { ascending: false })
 
-    const { data, error } = await supabase
-      .from('visitantes')
-      .select('*')
-      .order('created_at', { ascending: false })
+      if (error) {
+        setErro(error.message)
+        return
+      }
 
-    if (error) {
-      setErro(error.message)
+      setVisitantes(data || [])
+    } catch (err: any) {
+      setErro(err.message || 'Erro desconhecido ao carregar dados.')
+    } finally {
       setLoading(false)
-      return
     }
-
-    setVisitantes(data || [])
-    setLoading(false)
   }
 
   useEffect(() => {
@@ -68,33 +72,37 @@ export default function VisitantesPage() {
 
     if (!confirmar) return
 
-    // 🛠️ GARANTIA DE INTEGRIDADE: Remove o checklist antes de deletar o visitante mestre
-    await supabase
-      .from('visitantes_checklist')
-      .delete()
-      .eq('visitante_id', id)
+    try {
+      // GARANTIA DE INTEGRIDADE: Remove os checklists e tabelas vinculadas antes do mestre
+      await supabase
+        .from('visitantes_checklist')
+        .delete()
+        .eq('visitante_id', id)
 
-    await supabase
-      .from('visitantes_timeline')
-      .delete()
-      .eq('visitante_id', id)
+      await supabase
+        .from('visitantes_timeline')
+        .delete()
+        .eq('visitante_id', id)
 
-    await supabase
-      .from('visitantes_followup')
-      .delete()
-      .eq('visitante_id', id)
+      await supabase
+        .from('visitantes_followup')
+        .delete()
+        .eq('visitante_id', id)
 
-    const { error } = await supabase
-      .from('visitantes')
-      .delete()
-      .eq('id', id)
+      const { error } = await supabase
+        .from('visitantes')
+        .delete()
+        .eq('id', id)
 
-    if (error) {
-      alert(error.message)
-      return
+      if (error) {
+        alert(error.message)
+        return
+      }
+
+      carregarVisitantes()
+    } catch (err: any) {
+      alert('Erro ao tentar excluir o visitante: ' + err.message)
     }
-
-    carregarVisitantes()
   }
 
   async function cadastrarVisitante() {
@@ -103,50 +111,54 @@ export default function VisitantesPage() {
       return
     }
 
-    const { data, error } = await supabase
-      .from('visitantes')
-      .insert({
-        nome,
-        telefone,
-        email,
-        sexo,
-        faixa_etaria: faixaEtaria,
-        cidade,
-        data_visita: dataVisita || null,
-        origem,
-        pedido_oracao: pedidoOracao
-      })
-      .select()
-      .single()
+    try {
+      const { data, error } = await supabase
+        .from('visitantes')
+        .insert({
+          nome,
+          telefone,
+          email,
+          sexo,
+          faixa_etaria: faixaEtaria,
+          cidade,
+          data_visita: dataVisita || null,
+          origem,
+          pedido_oracao: pedidoOracao
+        })
+        .select()
+        .maybeSingle() // Ajustado para evitar exceções caso o retorno mude
 
-    if (error) {
-      alert(error.message)
-      return
+      if (error || !data) {
+        alert(error?.message || 'Não foi possível gerar o registro do visitante.')
+        return
+      }
+
+      const etapas = [
+        { etapa: 'primeiro_contato', responsavel: 'Secretaria Igreja' },
+        { etapa: 'segundo_contato', responsavel: 'Pastor Cleber' },
+        { etapa: 'intercessao', responsavel: 'Intercessão' },
+        { etapa: 'convite_cafe', responsavel: 'Convite Café' }
+      ]
+
+      for (const item of etapas) {
+        await supabase.from('visitantes_followup').insert({
+          visitante_id: data.id,
+          etapa: item.etapa,
+          status: 'pendente',
+          responsavel: item.responsavel
+        })
+      }
+
+      // INICIALIZAÇÃO AUTOMÁTICA: Checklist zerado
+      await supabase
+        .from('visitantes_checklist')
+        .insert([{ visitante_id: data.id }])
+
+      limparFormulario()
+      carregarVisitantes()
+    } catch (err: any) {
+      alert('Erro operacional no cadastro: ' + err.message)
     }
-
-    const etapas = [
-      { etapa: 'primeiro_contato', responsavel: 'Secretaria Igreja' },
-      { etapa: 'segundo_contato', responsavel: 'Pastor Cleber' },
-      { etapa: 'intercessao', responsavel: 'Intercessão' },
-      { etapa: 'convite_cafe', responsavel: 'Convite Café' }
-    ]
-
-    for (const item of etapas) {
-      await supabase.from('visitantes_followup').insert({
-        visitante_id: data.id,
-        etapa: item.etapa,
-        status: 'pendente',
-        responsavel: item.responsavel
-      })
-    }
-
-    // ⚡ INICIALIZAÇÃO AUTOMÁTICA: Cria o registro do checklist zerado para o novo visitante
-    await supabase
-      .from('visitantes_checklist')
-      .insert([{ visitante_id: data.id }])
-
-    limparFormulario()
-    carregarVisitantes()
   }
 
   function limparFormulario() {

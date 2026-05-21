@@ -176,10 +176,32 @@ export default function FichaVisitantePage() {
   }
 
   function responsavelDaEtapa(etapa: string) {
-    return (
-      configEtapas.find((item) => item.etapa === etapa)?.responsavel_nome ||
-      'Equipe IPI'
-    )
+    const etapaTexto = (etapa || '').toUpperCase();
+
+    // 1. Procura se existe alguma configuração dinâmica salva no banco
+    const responsavelConfigurado = configEtapas.find(
+      (item) => (item.etapa || '').toUpperCase() === etapaTexto
+    )?.responsavel_nome;
+
+    if (responsavelConfigurado) {
+      return responsavelConfigurado;
+    }
+
+    // 2. Se não encontrar, cai nas regras fixas de responsáveis por etapa
+    if (etapaTexto.includes('PRIMEIRO_CONTATO') || etapaTexto.includes('PRIMEIRO_CONTATO') || etapaTexto.includes('1')) {
+      return 'Secretária';
+    }
+    if (etapaTexto.includes('SEGUNDO_CONTATO') || etapaTexto.includes('SEGUNDO_CONTATO') || etapaTexto.includes('2')) {
+      return 'Pastor Cleber';
+    }
+    if (etapaTexto.includes('INTERCESSAO') || etapaTexto.includes('POSITIVO') || etapaTexto.includes('3')) {
+      return 'Intercessão';
+    }
+    if (etapaTexto.includes('CONVITE_CAFE') || etapaTexto.includes('POS_CAFE') || etapaTexto.includes('CAFÉ') || etapaTexto.includes('4') || etapaTexto.includes('PARTICIPOU') || etapaTexto.includes('5')) {
+      return 'Consolidação';
+    }
+
+    return 'Secretária';
   }
 
   async function salvarRegistro(etapa: string) {
@@ -341,7 +363,7 @@ export default function FichaVisitantePage() {
                       </h2>
 
                       <p className="text-slate-500 text-sm mt-1">
-                        Responsável: <span className="font-medium text-slate-700">{responsavelDaEtapa(etapa)}</span>
+                        Responsável: <span className="font-semibold text-indigo-600">{responsavelDaEtapa(etapa)}</span>
                       </p>
 
                       <div
@@ -582,7 +604,7 @@ function ChecklistIntegracaoComponent({
       itens: [
         { campo: 'aceitou_jesus', label: 'Aceitou Jesus' },
         { campo: 'acompanhamento_pastoral', label: 'Recebe acompanhamento pastoral' },
-        { campo: 'pedido_oracao', label: 'Pedido de oração ativo' },
+        { campo: 'pedido_oracao', label: 'Pedido de oração active' },
       ]
     },
     {

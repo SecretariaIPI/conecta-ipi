@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '@supabase/supabase-js' // 1. Garante o import oficial
 import {
   Users,
   Clock,
@@ -22,9 +22,10 @@ import {
   BarChart3
 } from 'lucide-react'
 
+// 2. Garante a criação do cliente de forma robusta e global para o arquivo
 const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
 )
 
 type Visitante = {
@@ -114,20 +115,26 @@ export default function DashboardPage() {
   }, [])
 
   async function carregarDados() {
-    const [vResp, fResp] = await Promise.all([
-      supabase
-        .from('visitantes')
-        .select('*')
-        .order('created_at', { ascending: false }),
+    try {
+      setLoading(true)
+      const [vResp, fResp] = await Promise.all([
+        supabase
+          .from('visitantes')
+          .select('*')
+          .order('created_at', { ascending: false }),
 
-      supabase
-        .from('visitantes_followup')
-        .select('*')
-    ])
+        supabase
+          .from('visitantes_followup')
+          .select('*')
+      ])
 
-    setVisitantes(vResp.data || [])
-    setFollowups(fResp.data || [])
-    setLoading(false)
+      setVisitantes(vResp.data || [])
+      setFollowups(fResp.data || [])
+    } catch (error) {
+      console.error("Erro na comunicação com o Supabase:", error)
+    } finally {
+      setLoading(false)
+    }
   }
 
   function dataLimite() {
@@ -178,7 +185,7 @@ export default function DashboardPage() {
   ).length
 
   const integrados = followups.filter(
-    (f) => f.status === 'integrado'
+    (f) => f.status === 'integrated' || f.status === 'integrado'
   ).length
 
   const arquivados = followups.filter(
@@ -226,12 +233,11 @@ export default function DashboardPage() {
                 </h1>
 
                 <p className="text-slate-500 mt-2 text-sm font-medium">
-                  Visão executiva e estratégica da jornada de integration de visitantes.
+                  Visão executiva e estratégica da jornada de integração de visitantes.
                 </p>
               </div>
 
               <div className="flex flex-wrap gap-2.5">
-                {/* NOVO BOTÃO DA VISÃO DO PASTOR ADICIONADO AQUI */}
                 <Link
                   href="/dashboard/integracao/pastoral"
                   className="bg-indigo-600 text-white hover:bg-indigo-700 px-4 py-2.5 rounded-xl text-xs font-extrabold flex items-center justify-center gap-2 shadow-sm transition active:scale-95"
