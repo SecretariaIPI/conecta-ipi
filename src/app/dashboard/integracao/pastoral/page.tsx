@@ -162,7 +162,7 @@ export default function DashboardExecutivoPastor() {
     const mapaLideres: Record<
       string,
       {
-        whites?: any
+        whites?: unknown
         ativos: number
         concluidos: number
       }

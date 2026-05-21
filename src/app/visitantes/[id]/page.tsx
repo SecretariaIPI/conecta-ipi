@@ -501,7 +501,7 @@ function ChecklistIntegracaoComponent({
   useEffect(() => {
     async function carregarChecklist() {
       try {
-        let { data, error } = await supabase
+        const { data, error } = await supabase
           .from('visitantes_checklist')
           .select('*')
           .eq('visitante_id', visitanteId)
