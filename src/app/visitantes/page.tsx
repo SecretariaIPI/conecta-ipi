@@ -21,8 +21,6 @@ interface Visitante {
   data_visita?: string
   confirmou_cafe?: boolean
 }
-}
-
 export default function VisitantesPage() {
   const [visitantes, setVisitantes] = useState<Visitante[]>([])
   const [loading, setLoading] = useState(true)
