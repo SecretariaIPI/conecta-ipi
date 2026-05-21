@@ -292,36 +292,30 @@ export default function IntegracaoPage() {
   }, [])
 
   async function carregarPipeline() {
-    const { data, error } = await supabase
-      .from('integracao_pipeline')
-      .select(`
-        *,
-        visitantes (
-          id,
-          nome,
-          telefone,
-          cidade,
-          confirmou_cafe
-        )
-      `)
-      .order('data_ultima_movimentacao', { ascending: false })
+  const { data, error } = await supabase
+    .from('integracao_pipeline')
+    .select(`
+      *,
+      visitantes!integracao_pipeline_visitante_id_fkey (
+        id,
+        nome,
+        telefone,
+        cidade,
+        confirmou_cafe
+      )
+    `)
+    .order('data_ultima_movimentacao', { ascending: false })
 
-    // ALERTA VISUAL IMPOSSÍVEL DE IGNORAR NA TELA
-    if (error) {
-      alert('🚨 ERRO DO SUPABASE:\n' + error.message)
-      setLoading(false)
-      return
-    }
+  console.log('PIPELINE >>>', data)
+  console.log('ERRO >>>', error)
 
-    if (!data || data.length === 0) {
-      alert('⚠️ ATENÇÃO: O banco respondeu sem erros, mas a tabela "integracao_pipeline" retornou ZERO registros. Verifique se há dados inseridos nela ou se o RLS está bloqueando.')
-    } else {
-      alert(`🎉 SUCESSO: O Supabase retornou ${data.length} linhas de dados com sucesso!`)
-    }
-
-    setPipeline((data as Pipeline[]) || [])
-    setLoading(false)
+  if (error) {
+    console.error(error)
+    return
   }
+
+  setPipeline(data || [])
+}
 
   function selecionarItem(item: Pipeline) {
     setSelecionado(item)
