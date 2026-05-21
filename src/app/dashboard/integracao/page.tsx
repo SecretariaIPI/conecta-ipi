@@ -84,7 +84,7 @@ type Pipeline = {
   visitantes: Visitante | Visitante[]
 }
 
-function访问者数据(
+function visitanteData(
   visitante: Visitante | Visitante[] | null | undefined
 ): Visitante | null {
   if (!visitante) return null
@@ -146,7 +146,7 @@ function CardVisitante({
   onWhatsapp: (item: Pipeline) => void
   onSelecionar: (item: Pipeline) => void
 }) {
-  const visitante =访问者数据(item.visitantes)
+  const visitante = visitanteData(item.visitantes)
 
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: item.id,
@@ -306,16 +306,17 @@ export default function IntegracaoPage() {
       `)
       .order('data_ultima_movimentacao', { ascending: false })
 
-    // Bloco de diagnóstico no console do navegador
-    console.log("========== DIAGNÓSTICO SUPABASE ==========")
-    console.log("Houve erro na requisição?:", error)
-    console.log("Dados brutos que vieram da tabela:", data)
-    console.log("==========================================")
-
+    // ALERTA VISUAL IMPOSSÍVEL DE IGNORAR NA TELA
     if (error) {
-      alert('Erro ao carregar dados do pipeline: ' + error.message)
+      alert('🚨 ERRO DO SUPABASE:\n' + error.message)
       setLoading(false)
       return
+    }
+
+    if (!data || data.length === 0) {
+      alert('⚠️ ATENÇÃO: O banco respondeu sem erros, mas a tabela "integracao_pipeline" retornou ZERO registros. Verifique se há dados inseridos nela ou se o RLS está bloqueando.')
+    } else {
+      alert(`🎉 SUCESSO: O Supabase retornou ${data.length} linhas de dados com sucesso!`)
     }
 
     setPipeline((data as Pipeline[]) || [])
@@ -371,7 +372,7 @@ export default function IntegracaoPage() {
   }
 
   function abrirWhatsapp(item: Pipeline) {
-    const visitante =访问者数据(item.visitantes)
+    const visitante = visitanteData(item.visitantes)
 
     if (!visitante?.telefone) return
 
@@ -385,7 +386,7 @@ export default function IntegracaoPage() {
   }
 
   function dispararNotificacaoLider(item: Pipeline) {
-    const visitante =访问者数据(item.visitantes)
+    const visitante = visitanteData(item.visitantes)
     const dias = diasParado(item.data_ultima_movimentacao)
 
     const mensagem = encodeURIComponent(
@@ -428,7 +429,7 @@ export default function IntegracaoPage() {
     if (filtro === 'sem_telefone') {
       return pipeline.filter(
         (p) =>
-          !访问者数据(p.visitantes)?.telefone &&
+          !visitanteData(p.visitantes)?.telefone &&
           p.etapa !== 'ARQUIVADO'
       )
     }
@@ -436,7 +437,7 @@ export default function IntegracaoPage() {
     if (filtro === 'confirmados_cafe') {
       return pipeline.filter(
         (p) =>
-          访问者数据(p.visitantes)?.confirmou_cafe &&
+          visitanteData(p.visitantes)?.confirmou_cafe &&
           p.etapa === 'CAFÉ'
       )
     }
@@ -460,13 +461,13 @@ export default function IntegracaoPage() {
 
   const mtSemWhats = pipeline.filter(
     (p) =>
-      !访问者数据(p.visitantes)?.telefone &&
+      !visitanteData(p.visitantes)?.telefone &&
       p.etapa !== 'ARQUIVADO'
   ).length
 
   const mtCafeHoje = pipeline.filter(
     (p) =>
-      访问者数据(p.visitantes)?.confirmou_cafe &&
+      visitanteData(p.visitantes)?.confirmou_cafe &&
       p.etapa === 'CAFÉ'
   ).length
 
@@ -584,7 +585,7 @@ export default function IntegracaoPage() {
           <div className="bg-white border border-rose-200 rounded-2xl p-5 shadow-2xs flex items-center justify-between">
             <div>
               <p className="text-slate-400 text-[10px] font-bold uppercase tracking-wider">
-                限制 Sem Telefone
+                📵 Sem Telefone
               </p>
               <h3 className="text-2xl font-black text-rose-600 mt-0.5 tracking-tight">
                 {mtSemWhats}
@@ -666,7 +667,7 @@ export default function IntegracaoPage() {
               <div className="w-[340px] rotate-2 opacity-95 pointer-events-none">
                 <div className="border border-indigo-200 shadow-md rounded-2xl p-4 bg-white space-y-2">
                   <h3 className="font-bold text-slate-900 text-sm">
-                    {访问者数据(activeItem.visitantes)?.nome || 'Visitante'}
+                    {visitanteData(activeItem.visitantes)?.nome || 'Visitante'}
                   </h3>
                   <div className="text-xs text-indigo-600 font-medium">
                     Movendo entre estágios...
@@ -685,7 +686,7 @@ export default function IntegracaoPage() {
                 <div className="flex justify-between items-center border-b border-slate-200 pb-4">
                   <div>
                     <h2 className="text-xl font-black text-slate-900 tracking-tight">
-                      {访问者数据(selecionado.visitantes)?.nome}
+                      {visitanteData(selecionado.visitantes)?.nome}
                     </h2>
                     <p className="text-xs text-slate-500 mt-0.5 font-medium">
                       Acompanhamento Pastoral Individual
