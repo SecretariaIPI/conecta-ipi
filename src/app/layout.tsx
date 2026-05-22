@@ -1,4 +1,4 @@
-import '@/globals.css'
+import '@/app/globals.css'
 import Link from 'next/link'
 import {
   LayoutDashboard,
