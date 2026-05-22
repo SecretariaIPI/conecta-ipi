@@ -1,8 +1,9 @@
+cat << 'EOF' > src/app/dashboard/page.tsx
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { createClient } from '@supabase/supabase-js' // 1. Garante o import oficial
+import { createClient } from '@supabase/supabase-js'
 import {
   Users,
   Clock,
@@ -22,7 +23,6 @@ import {
   BarChart3
 } from 'lucide-react'
 
-// 2. Garante a criação do cliente de forma robusta e global para o arquivo
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || '',
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
@@ -238,8 +238,9 @@ export default function DashboardPage() {
               </div>
 
               <div className="flex flex-wrap gap-2.5">
+                {/* BOTÃO ROXO APONTANDO PARA A NOVA ROTA EXCLUSIVA */}
                 <Link
-                 href="/dashboard/integracao"
+                  href="/dashboard/pastor"
                   className="bg-indigo-600 text-white hover:bg-indigo-700 px-4 py-2.5 rounded-xl text-xs font-extrabold flex items-center justify-center gap-2 shadow-sm transition active:scale-95"
                 >
                   <BarChart3 size={15} />
@@ -262,6 +263,7 @@ export default function DashboardPage() {
                   Convites Café
                 </Link>
 
+                {/* BOTÃO ESCURO APONTANDO PARA A PIPELINE KANBAN */}
                 <Link
                   href="/dashboard/integracao"
                   className="bg-slate-800 text-white hover:bg-slate-700 px-4 py-2.5 rounded-xl text-xs font-extrabold flex items-center justify-center gap-2 shadow-sm transition active:scale-95"
@@ -629,3 +631,4 @@ export default function DashboardPage() {
     </>
   )
 }
+EOF
