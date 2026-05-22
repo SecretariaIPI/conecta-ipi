@@ -53,25 +53,24 @@ export default function VisaoEstatisticaPastorPage() {
       }
 
       const registrosFormatados: RegistroPipeline[] = (data || []).map((item: any) => {
-        // 1. Identificação robusta do status de Membro Local Integrado
+        // Valida todas as possibilidades de colunas mapeadas no painel geral
         const ehIntegrado = item.integrado === true || 
                             item.integrados === true ||
                             item.membresia === true ||
                             String(item.etapa || '').toUpperCase().includes('INTEGRAD') ||
                             String(item.status || '').toUpperCase().includes('INTEGRAD')
 
-        // 2. Identificação robusta se a pessoa participou/confirmou presença no Café
-        const alcancouCafe = ehIntegrado || 
-                             item.cafe === true || 
+        const alcancouCafe = item.cafe === true || 
                              item.confirmado_cafe === true || 
                              item.confirmado === true ||
                              String(item.etapa || '').toUpperCase().includes('CAF') ||
-                             String(item.status || '').toUpperCase().includes('CAF')
+                             String(item.status || '').toUpperCase().includes('CAF') ||
+                             ehIntegrado // Regra de fluxo: quem integrou passou pelo café
 
-        // 3. Montagem do texto legível para a coluna "Etapa Atual" da tabela
+        // Determina o rótulo de exibição com base nos booleanos estruturais
         let textoEtapaExibicao = item.etapa || item.status || 'Visitante'
         if (ehIntegrado) {
-          textoEtapaExibicao = 'Integrado na Igreja'
+          textoEtapaExibicao = 'Integrado'
         } else if (alcancouCafe) {
           textoEtapaExibicao = 'Confirmado no Café'
         }
@@ -317,7 +316,7 @@ export default function VisaoEstatisticaPastorPage() {
         </div>
       </div>
 
-      {/* Histórico Mensal */}
+      {/* Evolução Histórica */}
       <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
         <div>
           <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
