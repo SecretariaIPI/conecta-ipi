@@ -15,6 +15,7 @@ interface RegistroPipeline {
   telefone: string | null
   etapa: string
   integrado: boolean
+  passouCafe: boolean
   data_inicio: string
   data_ultima_movimentacao: string
 }
@@ -52,16 +53,38 @@ export default function VisaoEstatisticaPastorPage() {
       }
 
       const registrosFormatados: RegistroPipeline[] = (data || []).map((item: any) => {
-        const statusEtapa = item.etapa || item.status || 'Visitante'
-        const ehIntegrado = item.integrado === true || String(item.status || '').toUpperCase() === 'INTEGRADO' || item.membresia === true
+        // 1. Identificação robusta do status de Membro Local Integrado
+        const ehIntegrado = item.integrado === true || 
+                            item.integrados === true ||
+                            item.membresia === true ||
+                            String(item.etapa || '').toUpperCase().includes('INTEGRAD') ||
+                            String(item.status || '').toUpperCase().includes('INTEGRAD')
+
+        // 2. Identificação robusta se a pessoa participou/confirmou presença no Café
+        const alcancouCafe = ehIntegrado || 
+                             item.cafe === true || 
+                             item.confirmado_cafe === true || 
+                             item.confirmado === true ||
+                             String(item.etapa || '').toUpperCase().includes('CAF') ||
+                             String(item.status || '').toUpperCase().includes('CAF')
+
+        // 3. Montagem do texto legível para a coluna "Etapa Atual" da tabela
+        let textoEtapaExibicao = item.etapa || item.status || 'Visitante'
+        if (ehIntegrado) {
+          textoEtapaExibicao = 'Integrado na Igreja'
+        } else if (alcancouCafe) {
+          textoEtapaExibicao = 'Confirmado no Café'
+        }
+
         const dataCriacao = item.data_inicio || item.created_at || new Date().toISOString()
 
         return {
           id: item.id,
           nome: item.nome || 'Não identificado',
           telefone: item.telefone || item.celular || 'Sem contato',
-          etapa: statusEtapa,
+          etapa: textoEtapaExibicao,
           integrado: ehIntegrado,
+          passouCafe: alcancouCafe,
           data_inicio: dataCriacao,
           data_ultima_movimentacao: item.updated_at || dataCriacao
         }
@@ -71,7 +94,7 @@ export default function VisaoEstatisticaPastorPage() {
       processarMetricasETabela(registrosFormatados, 'TODOS')
 
     } catch (err) {
-      console.error('Erro pastoral crítico:', err)
+      console.error('Erro na sincronização estatística pastoral:', err)
     } finally {
       setLoading(false)
     }
@@ -86,25 +109,18 @@ export default function VisaoEstatisticaPastorPage() {
 
     registros.forEach(r => {
       gTotal++
-      
-      const txtEtapa = String(r.etapa).toUpperCase()
-                        .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-      
-      const alcancouCafe = txtEtapa.includes('CAF') || txtEtapa.includes('CONSOLID') || r.integrado
-
-      if (alcancouCafe) gCafe++
+      if (r.passouCafe) gCafe++
       if (r.integrado) gIntegrados++
 
-      // Garante extração correta do ano-mês (Ex: 2026-05)
       const mesAno = r.data_inicio.substring(0, 7)
-
-      if (!mapaHistorico[mesAno]) {
-        mapaHistorico[mesAno] = { total: 0, cafe: 0, integrados: 0, taxaCafe: '0%', taxaIgreja: '0%' }
+      if (mesAno && mesAno.length === 7) {
+        if (!mapaHistorico[mesAno]) {
+          mapaHistorico[mesAno] = { total: 0, cafe: 0, integrados: 0, taxaCafe: '0%', taxaIgreja: '0%' }
+        }
+        mapaHistorico[mesAno].total += 1
+        if (r.passouCafe) mapaHistorico[mesAno].cafe += 1
+        if (r.integrado) mapaHistorico[mesAno].integrados += 1
       }
-
-      mapaHistorico[mesAno].total += 1
-      if (alcancouCafe) mapaHistorico[mesAno].cafe += 1
-      if (r.integrado) mapaHistorico[mesAno].integrados += 1
     })
 
     Object.keys(mapaHistorico).forEach(mes => {
@@ -137,9 +153,6 @@ export default function VisaoEstatisticaPastorPage() {
   function lidarComMudancaFiltro(novoFiltro: string) {
     setMesFiltro(novoFiltro)
     processarMetricasETabela(todosRegistros, novoFiltro)
-    
-    // Rola suavemente de volta para o topo da tabela/página para ver a lista nominativa mudando
-    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   function formatarData(dataString: string | null) {
@@ -149,7 +162,6 @@ export default function VisaoEstatisticaPastorPage() {
     return data.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
   }
 
-  // Função robusta de tratamento de nomes para exibição
   function converterMesNome(mesAno: string) {
     if (mesAno === 'TODOS') return 'Todo o Período'
     const partes = mesAno.split('-')
@@ -185,7 +197,7 @@ export default function VisaoEstatisticaPastorPage() {
           </p>
         </div>
 
-        {/* Bloco de Filtros */}
+        {/* Filtros */}
         <div className="flex items-center gap-3 bg-white border border-slate-200 px-3 py-1.5 rounded-xl shadow-xs">
           <button 
             onClick={() => lidarComMudancaFiltro('TODOS')}
@@ -244,7 +256,7 @@ export default function VisaoEstatisticaPastorPage() {
         </div>
       </div>
 
-      {/* Tabela Detalhada */}
+      {/* Tabela de Dados */}
       <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
         <div>
           <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
@@ -279,7 +291,13 @@ export default function VisaoEstatisticaPastorPage() {
                     </td>
                     <td className="py-3.5 px-4 text-slate-500 font-semibold">{formatarData(p.data_inicio)}</td>
                     <td className="py-3.5 px-4 text-center">
-                      <span className="bg-slate-100 text-slate-800 text-xxs font-black px-2.5 py-1 rounded-md uppercase tracking-wider border border-slate-200/40">
+                      <span className={`text-xxs font-black px-2.5 py-1 rounded-md uppercase tracking-wider border ${
+                        p.integrado 
+                          ? 'bg-emerald-50 text-emerald-800 border-emerald-200' 
+                          : p.passouCafe 
+                            ? 'bg-amber-50 text-amber-800 border-amber-200' 
+                            : 'bg-slate-100 text-slate-800 border-slate-200/40'
+                      }`}>
                         {p.etapa}
                       </span>
                     </td>
@@ -299,7 +317,7 @@ export default function VisaoEstatisticaPastorPage() {
         </div>
       </div>
 
-      {/* Histórico Executivo */}
+      {/* Histórico Mensal */}
       <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
         <div>
           <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
