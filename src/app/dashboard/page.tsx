@@ -239,7 +239,7 @@ export default function DashboardPage() {
 
               <div className="flex flex-wrap gap-2.5">
                 <Link
-                 href="/dashboard/integracao">
+                 href="/dashboard/integracao"
                   className="bg-indigo-600 text-white hover:bg-indigo-700 px-4 py-2.5 rounded-xl text-xs font-extrabold flex items-center justify-center gap-2 shadow-sm transition active:scale-95"
                 >
                   <BarChart3 size={15} />

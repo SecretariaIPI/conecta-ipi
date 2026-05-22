@@ -283,7 +283,7 @@ export default function AutomacoesPage() {
   // 🛡️ TRAVA DE HIDRATAÇÃO DO DOM (Evita erros assíncronos de listener do dnd-kit)
   const [montado, setMontado] = useState(false)
   
-  const dataLimite = '2026-01-01'
+  const dataLimite = '2025-01-01'
   const sensors = useSensors(useSensor(PointerSensor))
 
   useEffect(() => {
