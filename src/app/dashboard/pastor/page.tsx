@@ -40,12 +40,10 @@ export default function VisaoEstatisticaPastorPage() {
     try {
       setLoading(true)
 
-      // Tentativa 1: Buscar da tabela 'visitantes' que é o padrão do sistema
       let { data, error } = await supabase
         .from('visitantes')
         .select('*')
 
-      // Se der erro ou vier vazio, tenta na tabela 'pessoas'
       if (error || !data || data.length === 0) {
         const respostaAlternativa = await supabase.from('pessoas').select('*')
         if (!respostaAlternativa.error && respostaAlternativa.data) {
@@ -53,11 +51,7 @@ export default function VisaoEstatisticaPastorPage() {
         }
       }
 
-      console.log("=== DADOS ENCONTRADOS NA PASTA PASTOR ===", data)
-
-      // Normaliza as propriedades vindas do banco (etapa, integrado, etc)
       const registrosFormatados: RegistroPipeline[] = (data || []).map((item: any) => {
-        // Mapeia os campos caso usem snake_case ou formatos diferentes no banco
         const statusEtapa = item.etapa || item.status || 'Visitante'
         const ehIntegrado = item.integrado === true || String(item.status || '').toUpperCase() === 'INTEGRADO' || item.membresia === true
         const dataCriacao = item.data_inicio || item.created_at || new Date().toISOString()
@@ -92,12 +86,16 @@ export default function VisaoEstatisticaPastorPage() {
 
     registros.forEach(r => {
       gTotal++
+      
       const txtEtapa = String(r.etapa).toUpperCase()
-      const alcancouCafe = txtEtapa.includes('CAF') || txtEtapa.includes('CONSOLIDACAO') || r.integrado
+                        .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+      
+      const alcancouCafe = txtEtapa.includes('CAF') || txtEtapa.includes('CONSOLID') || r.integrado
 
       if (alcancouCafe) gCafe++
       if (r.integrado) gIntegrados++
 
+      // Garante extração correta do ano-mês (Ex: 2026-05)
       const mesAno = r.data_inicio.substring(0, 7)
 
       if (!mapaHistorico[mesAno]) {
@@ -139,6 +137,9 @@ export default function VisaoEstatisticaPastorPage() {
   function lidarComMudancaFiltro(novoFiltro: string) {
     setMesFiltro(novoFiltro)
     processarMetricasETabela(todosRegistros, novoFiltro)
+    
+    // Rola suavemente de volta para o topo da tabela/página para ver a lista nominativa mudando
+    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   function formatarData(dataString: string | null) {
@@ -148,6 +149,7 @@ export default function VisaoEstatisticaPastorPage() {
     return data.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
   }
 
+  // Função robusta de tratamento de nomes para exibição
   function converterMesNome(mesAno: string) {
     if (mesAno === 'TODOS') return 'Todo o Período'
     const partes = mesAno.split('-')
@@ -169,7 +171,7 @@ export default function VisaoEstatisticaPastorPage() {
   return (
     <div className="max-w-7xl mx-auto space-y-8 p-4 sm:p-6 lg:p-8">
       
-      {/* Header */}
+      {/* Cabeçalho */}
       <div className="border-b border-slate-200 pb-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-3xl font-black text-slate-900 flex items-center gap-3 tracking-tight">
@@ -183,7 +185,7 @@ export default function VisaoEstatisticaPastorPage() {
           </p>
         </div>
 
-        {/* Filtros */}
+        {/* Bloco de Filtros */}
         <div className="flex items-center gap-3 bg-white border border-slate-200 px-3 py-1.5 rounded-xl shadow-xs">
           <button 
             onClick={() => lidarComMudancaFiltro('TODOS')}
@@ -242,7 +244,7 @@ export default function VisaoEstatisticaPastorPage() {
         </div>
       </div>
 
-      {/* Tabela */}
+      {/* Tabela Detalhada */}
       <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
         <div>
           <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
@@ -297,7 +299,7 @@ export default function VisaoEstatisticaPastorPage() {
         </div>
       </div>
 
-      {/* Histórico */}
+      {/* Histórico Executivo */}
       <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
         <div>
           <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
@@ -317,7 +319,7 @@ export default function VisaoEstatisticaPastorPage() {
                 <div 
                   key={mes}
                   onClick={() => lidarComMudancaFiltro(mes)}
-                  className={`p-4 border rounded-xl flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 cursor-pointer transition active:scale-99 ${
+                  className={`p-4 border rounded-xl flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 cursor-pointer transition transform active:scale-98 ${
                     mesFiltro === mes 
                       ? 'border-indigo-600 bg-indigo-50/20 shadow-xs' 
                       : 'border-slate-100 bg-white hover:border-slate-200 hover:bg-slate-50/40'
