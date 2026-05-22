@@ -20,6 +20,7 @@ interface Visitante {
   origem?: string
   data_visita?: string
   confirmou_cafe?: boolean
+} // 🌟 CORRIGIDO: Agora a interface fecha corretamente aqui!
   
 export default function VisitantesPage() {
   const [visitantes, setVisitantes] = useState<Visitante[]>([])
@@ -50,7 +51,7 @@ export default function VisitantesPage() {
       }
 
       setVisitantes(data || [])
-    } catch (err: visitante) {
+    } catch (err: any) { // 🌟 CORRIGIDO: Alterado de 'visitante' para 'any'
       setErro(err.message || 'Erro desconhecido ao carregar dados.')
     } finally {
       setLoading(false)
@@ -96,7 +97,7 @@ export default function VisitantesPage() {
       }
 
       carregarVisitantes()
-    } catch (err: visitante) {
+    } catch (err: any) { // 🌟 CORRIGIDO: Alterado de 'visitante' para 'any'
       alert('Erro ao tentar excluir o visitante: ' + err.message)
     }
   }
@@ -152,7 +153,7 @@ export default function VisitantesPage() {
 
       limparFormulario()
       carregarVisitantes()
-    } catch (err: visitante) {
+    } catch (err: any) { // 🌟 CORRIGIDO: Alterado de 'visitante' para 'any'
       alert('Erro operacional no cadastro: ' + err.message)
     }
   }
