@@ -5,7 +5,6 @@ import Link from 'next/link'
 import { createClient } from '@supabase/supabase-js'
 import { UserPlus, Trash2, Phone, MapPin, Eye } from 'lucide-react'
 
-// Inicialização segura e resiliente para o ambiente da Vercel
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || '',
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
@@ -20,7 +19,7 @@ interface Visitante {
   origem?: string
   data_visita?: string
   confirmou_cafe?: boolean
-} // 🌟 CORRIGIDO: Agora a interface fecha corretamente aqui!
+}
   
 export default function VisitantesPage() {
   const [visitantes, setVisitantes] = useState<Visitante[]>([])
@@ -51,7 +50,7 @@ export default function VisitantesPage() {
       }
 
       setVisitantes(data || [])
-    } catch (err: any) { // 🌟 CORRIGIDO: Alterado de 'visitante' para 'any'
+    } catch (err: any) {
       setErro(err.message || 'Erro desconhecido ao carregar dados.')
     } finally {
       setLoading(false)
@@ -70,7 +69,6 @@ export default function VisitantesPage() {
     if (!confirmar) return
 
     try {
-      // GARANTIA DE INTEGRIDADE: Remove os checklists e tabelas vinculadas antes do mestre
       await supabase
         .from('visitantes_checklist')
         .delete()
@@ -97,7 +95,7 @@ export default function VisitantesPage() {
       }
 
       carregarVisitantes()
-    } catch (err: any) { // 🌟 CORRIGIDO: Alterado de 'visitante' para 'any'
+    } catch (err: any) {
       alert('Erro ao tentar excluir o visitante: ' + err.message)
     }
   }
@@ -123,7 +121,7 @@ export default function VisitantesPage() {
           pedido_oracao: pedidoOracao
         })
         .select()
-        .maybeSingle() // Ajustado para evitar exceções caso o retorno mude
+        .maybeSingle()
 
       if (error || !data) {
         alert(error?.message || 'Não foi possível gerar o registro do visitante.')
@@ -146,14 +144,13 @@ export default function VisitantesPage() {
         })
       }
 
-      // INICIALIZAÇÃO AUTOMÁTICA: Checklist zerado
       await supabase
         .from('visitantes_checklist')
         .insert([{ visitante_id: data.id }])
 
       limparFormulario()
       carregarVisitantes()
-    } catch (err: any) { // 🌟 CORRIGIDO: Alterado de 'visitante' para 'any'
+    } catch (err: any) {
       alert('Erro operacional no cadastro: ' + err.message)
     }
   }
@@ -195,7 +192,6 @@ export default function VisitantesPage() {
         <p className="text-slate-500 mt-1">Gerencie a recepção, acompanhamento e a integração de novos membros.</p>
       </div>
 
-      {/* Formulário de Cadastro Modernizado */}
       <div className="bg-white rounded-3xl border border-slate-200/80 shadow-sm p-6 space-y-4">
         <h3 className="text-lg font-bold text-slate-800">Novo Cadastro</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -274,7 +270,6 @@ export default function VisitantesPage() {
         </button>
       </div>
 
-      {/* Listagem em Tabela Limpa */}
       <div className="bg-white rounded-3xl border border-slate-200/80 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
