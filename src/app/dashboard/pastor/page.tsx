@@ -34,11 +34,11 @@ interface MetricasMes {
 export default function VisaoEstatisticaPastorPage() {
   const [loading, setLoading] = useState(true)
   const [todosRegistros, setTodosRegistros] = useState<RegistroPipeline[]>([])
-  const [mesFiltro, setMesFiltro] = useState<string>(new Date().toISOString().substring(0, 7))
+  const [mesFiltro, setMesFiltro] = useState<string>('TODOS') // Alterado para começar mostrando tudo por padrão
   
   const [metricasAtuais, setMetricasAtuais] = useState<MetricasMes>({ total: 0, cafe: 0, integrados: 0, taxaCafe: '0%', taxaIgreja: '0%' })
   const [historicoMeses, setHistoricoMeses] = useState<{ [key: string]: MetricasMes }>({})
-  const [pessoasNoMes, setPessoasNoMes] = useState<RegistroPipeline[]>([])
+  const [pessoasFiltradas, setPessoasFiltradas] = useState<RegistroPipeline[]>([])
 
   async function carregarDadosPipeline() {
     try {
@@ -69,7 +69,7 @@ export default function VisaoEstatisticaPastorPage() {
       }))
 
       setTodosRegistros(registrosFormatados)
-      calcularMetricasEHistorico(registrosFormatados)
+      processarMetricasETabela(registrosFormatados, 'TODOS')
 
     } catch (err) {
       console.error('Erro ao carregar dados pastorais:', err)
@@ -78,51 +78,67 @@ export default function VisaoEstatisticaPastorPage() {
     }
   }
 
-  function calcularMetricasEHistorico(registros: RegistroPipeline[]) {
+  function processarMetricasETabela(registros: RegistroPipeline[], filtro: string) {
     const mapaHistorico: { [key: string]: MetricasMes } = {}
+    
+    // Métricas gerais para a opção 'TODOS'
+    let gTotal = 0
+    let gCafe = 0
+    let gIntegrados = 0
 
     registros.forEach(r => {
+      // Conta globais
+      gTotal++
+      const alcancouCafe = r.etapa?.toUpperCase().includes('CAF') || r.etapa?.toUpperCase().includes('CONSOLIDACAO') || r.integrado
+      if (alcancouCafe) gCafe++
+      if (r.integrado) gIntegrados++
+
+      // Agrupa no histórico mensal se houver data
       if (!r.data_inicio) return
-      const mesAno = r.data_inicio.substring(0, 7)
+      const mesAno = r.data_inicio.substring(0, 7) // Pega 'YYYY-MM'
 
       if (!mapaHistorico[mesAno]) {
         mapaHistorico[mesAno] = { total: 0, cafe: 0, integrados: 0, taxaCafe: '0%', taxaIgreja: '0%' }
       }
 
       mapaHistorico[mesAno].total += 1
-      
-      if (r.etapa.toUpperCase().includes('CAF') || r.etapa.toUpperCase().includes('CONSOLIDACAO') || r.integrado) {
-        mapaHistorico[mesAno].cafe += 1
-      }
-      if (r.integrado) {
-        mapaHistorico[mesAno].integrados += 1
-      }
+      if (alcancouCafe) mapaHistorico[mesAno].cafe += 1
+      if (r.integrado) mapaHistorico[mesAno].integrados += 1
     })
 
+    // Calcula percentuais do histórico
     Object.keys(mapaHistorico).forEach(mes => {
       const m = mapaHistorico[mes]
       m.taxaCafe = m.total > 0 ? ((m.cafe / m.total) * 100).toFixed(1) + '%' : '0%'
       m.taxaIgreja = m.total > 0 ? ((m.integrados / m.total) * 100).toFixed(1) + '%' : '0%'
     })
-
     setHistoricoMeses(mapaHistorico)
 
-    const mAtual = mapaHistorico[mesFiltro] || { total: 0, cafe: 0, integrados: 0, taxaCafe: '0%', taxaIgreja: '0%' }
-    setMetricasAtuais(mAtual)
-
-    const filtrados = registros.filter(r => r.data_inicio && r.data_inicio.startsWith(mesFiltro))
-    setPessoasNoMes(filtrados)
+    // Define o que exibir nos cards superiores e tabela baseado no filtro selecionado
+    if (filtro === 'TODOS') {
+      setMetricasAtuais({
+        total: gTotal,
+        cafe: gCafe,
+        integrados: gIntegrados,
+        taxaCafe: gTotal > 0 ? ((gCafe / gTotal) * 100).toFixed(1) + '%' : '0%',
+        taxaIgreja: gTotal > 0 ? ((gIntegrados / gTotal) * 100).toFixed(1) + '%' : '0%'
+      })
+      setPessoasFiltradas(registros)
+    } else {
+      const mMes = mapaHistorico[filtro] || { total: 0, cafe: 0, integrados: 0, taxaCafe: '0%', taxaIgreja: '0%' }
+      setMetricasAtuais(mMes)
+      setPessoasFiltradas(registros.filter(r => r.data_inicio && r.data_inicio.startsWith(filtro)))
+    }
   }
 
   useEffect(() => {
     carregarDadosPipeline()
   }, [])
 
-  useEffect(() => {
-    if (todosRegistros.length > 0) {
-      calcularMetricasEHistorico(todosRegistros)
-    }
-  }, [mesFiltro])
+  function lidarComMudancaFiltro(novoFiltro: string) {
+    setMesFiltro(novoFiltro)
+    processarMetricasETabela(todosRegistros, novoFiltro)
+  }
 
   function formatarData(dataString: string | null) {
     if (!dataString) return '-'
@@ -131,6 +147,7 @@ export default function VisaoEstatisticaPastorPage() {
   }
 
   function converterMesNome(mesAno: string) {
+    if (mesAno === 'TODOS') return 'Todo o Período'
     const [ano, mes] = mesAno.split('-')
     const meses = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
     return `${meses[parseInt(mes) - 1]} de ${ano}`
@@ -140,7 +157,7 @@ export default function VisaoEstatisticaPastorPage() {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center gap-2 text-slate-400 text-sm">
         <Loader2 className="animate-spin text-indigo-600" size={32} />
-        <span className="font-semibold tracking-wide">Construindo histórico analítico...</span>
+        <span className="font-semibold tracking-wide">Sincronizando histórico analítico...</span>
       </div>
     )
   }
@@ -148,6 +165,7 @@ export default function VisaoEstatisticaPastorPage() {
   return (
     <div className="max-w-7xl mx-auto space-y-8 p-4 sm:p-6 lg:p-8">
       
+      {/* Cabeçalho */}
       <div className="border-b border-slate-200 pb-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-3xl font-black text-slate-900 flex items-center gap-3 tracking-tight">
@@ -161,57 +179,71 @@ export default function VisaoEstatisticaPastorPage() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2 bg-white border border-slate-200 px-3 py-2 rounded-xl shadow-xs">
-          <Calendar size={16} className="text-slate-400" />
-          <input 
-            type="month" 
-            value={mesFiltro}
-            onChange={(e) => setMesFiltro(e.target.value)}
-            className="text-xs font-bold text-slate-700 outline-none border-none bg-transparent cursor-pointer"
-          />
+        {/* Filtro Seleção Período */}
+        <div className="flex items-center gap-3 bg-white border border-slate-200 px-3 py-1.5 rounded-xl shadow-xs">
+          <button 
+            onClick={() => lidarComMudancaFiltro('TODOS')}
+            className={`text-xxs font-black px-2.5 py-1 rounded-md transition-colors ${mesFiltro === 'TODOS' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:bg-slate-100'}`}
+          >
+            VER TUDO
+          </button>
+          <div className="h-4 w-px bg-slate-200"></div>
+          <div className="flex items-center gap-1.5">
+            <Calendar size={14} className="text-slate-400" />
+            <input 
+              type="month" 
+              value={mesFiltro === 'TODOS' ? '' : mesFiltro}
+              onChange={(e) => {
+                if (e.target.value) lidarComMudancaFiltro(e.target.value)
+              }}
+              className="text-xs font-bold text-slate-700 outline-none border-none bg-transparent cursor-pointer"
+            />
+          </div>
         </div>
       </div>
 
+      {/* Cards Indicadores */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs flex items-center justify-between">
           <div>
-            <p className="text-slate-500 text-xs font-bold uppercase tracking-wider">Visitantes no Mês</p>
+            <p className="text-slate-400 text-xxs font-bold uppercase tracking-wider">Visitantes no Período</p>
             <h3 className="text-4xl font-black text-slate-900 mt-1">{metricasAtuais.total} <span className="text-sm font-normal text-slate-400">almas</span></h3>
-            <p className="text-xs text-indigo-600 font-semibold mt-1">100% da recepção ativa</p>
+            <p className="text-xs text-indigo-600 font-semibold mt-1">Recepção ativa mapeada</p>
           </div>
-          <div className="bg-slate-100 text-slate-600 p-3 rounded-xl">
+          <div className="bg-slate-50 text-slate-400 p-3 rounded-xl border border-slate-100">
             <Users size={22} />
           </div>
         </div>
 
         <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs flex items-center justify-between">
           <div>
-            <p className="text-amber-800 text-xs font-bold uppercase tracking-wider">Avançaram para o Café</p>
+            <p className="text-amber-800 text-xxs font-bold uppercase tracking-wider">Avançaram para o Café</p>
             <h3 className="text-4xl font-black text-amber-600 mt-1">{metricasAtuais.cafe} <span className="text-sm font-normal text-slate-400">pessoas</span></h3>
             <p className="text-xs text-amber-700 font-semibold mt-1">Taxa de conversão: {metricasAtuais.taxaCafe}</p>
           </div>
-          <div className="bg-amber-50 text-amber-600 p-3 rounded-xl">
+          <div className="bg-amber-50 text-amber-600 p-3 rounded-xl border border-amber-100">
             <Coffee size={22} />
           </div>
         </div>
 
         <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs flex items-center justify-between">
           <div>
-            <p className="text-emerald-800 text-xs font-bold uppercase tracking-wider">Total de Integrados</p>
+            <p className="text-emerald-800 text-xxs font-bold uppercase tracking-wider">Total de Integrados</p>
             <h3 className="text-4xl font-black text-emerald-600 mt-1">{metricasAtuais.integrados} <span className="text-sm font-normal text-slate-400">membros</span></h3>
             <p className="text-xs text-emerald-700 font-semibold mt-1">Eficiência de membresia: {metricasAtuais.taxaIgreja}</p>
           </div>
-          <div className="bg-emerald-50 text-emerald-600 p-3 rounded-xl">
+          <div className="bg-emerald-50 text-emerald-600 p-3 rounded-xl border border-emerald-100">
             <Award size={22} />
           </div>
         </div>
       </div>
 
+      {/* Tabela de Pessoas */}
       <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
         <div>
           <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
             <Clock className="text-indigo-600" size={18} />
-            Movimentações Detalhadas do Mês ({converterMesNome(mesFiltro)})
+            Movimentações Detalhadas ({converterMesNome(mesFiltro)})
           </h2>
           <p className="text-xs text-slate-500">Listagem nominativa com datas de entrada e última alteração pastoral.</p>
         </div>
@@ -228,12 +260,12 @@ export default function VisaoEstatisticaPastorPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-xs font-medium text-slate-700">
-              {pessoasNoMes.length === 0 ? (
+              {pessoasFiltradas.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="py-8 text-center text-slate-400 font-normal">Nenhum registro de integração iniciado neste mês.</td>
+                  <td colSpan={5} className="py-8 text-center text-slate-400 font-normal">Nenhum registro encontrado para o filtro selecionado.</td>
                 </tr>
               ) : (
-                pessoasNoMes.map((p) => (
+                pessoasFiltradas.map((p) => (
                   <tr key={p.id} className="hover:bg-slate-50/50 transition-colors">
                     <td className="py-3.5 px-4">
                       <p className="font-bold text-slate-900">{p.visitantes?.nome || 'Não identificado'}</p>
@@ -261,6 +293,7 @@ export default function VisaoEstatisticaPastorPage() {
         </div>
       </div>
 
+      {/* Histórico Consolidado Mês a Mês */}
       <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
         <div>
           <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
@@ -271,47 +304,51 @@ export default function VisaoEstatisticaPastorPage() {
         </div>
 
         <div className="grid grid-cols-1 gap-3">
-          {Object.keys(historicoMeses).sort((a, b) => b.localeCompare(a)).map((mes) => {
-            const m = historicoMeses[mes]
-            return (
-              <div 
-                key={mes}
-                onClick={() => setMesFiltro(mes)}
-                className={`p-4 border rounded-xl flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 cursor-pointer transition active:scale-99 ${
-                  mesFiltro === mes 
-                    ? 'border-indigo-600 bg-indigo-50/20 shadow-xs' 
-                    : 'border-slate-100 bg-white hover:border-slate-200 hover:bg-slate-50/40'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <div className={`p-2 rounded-xl font-bold text-xs ${mesFiltro === mes ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'}`}>
-                    <Calendar size={16} />
+          {Object.keys(historicoMeses).length === 0 ? (
+            <p className="text-xs text-slate-400 py-2">Nenhum histórico mensal pôde ser gerado (verifique as datas de ingresso no banco).</p>
+          ) : (
+            Object.keys(historicoMeses).sort((a, b) => b.localeCompare(a)).map((mes) => {
+              const m = historicoMeses[mes]
+              return (
+                <div 
+                  key={mes}
+                  onClick={() => lidarComMudancaFiltro(mes)}
+                  className={`p-4 border rounded-xl flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 cursor-pointer transition active:scale-99 ${
+                    mesFiltro === mes 
+                      ? 'border-indigo-600 bg-indigo-50/20 shadow-xs' 
+                      : 'border-slate-100 bg-white hover:border-slate-200 hover:bg-slate-50/40'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className={`p-2 rounded-xl font-bold text-xs ${mesFiltro === mes ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'}`}>
+                      <Calendar size={16} />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-sm text-slate-900">{converterMesNome(mes)}</h4>
+                      <p className="text-slate-400 text-xxs font-medium">Clique para abrir detalhes nominativos deste mês</p>
+                    </div>
                   </div>
-                  <div>
-                    <h4 className="font-bold text-sm text-slate-900">{converterMesNome(mes)}</h4>
-                    <p className="text-slate-400 text-xxs font-medium">Clique para abrir detalhes nominativos deste mês</p>
-                  </div>
-                </div>
 
-                <div className="flex flex-wrap items-center gap-6 text-xs">
-                  <div>
-                    <span className="text-slate-400 font-bold uppercase tracking-wider text-xxs block">Visitou</span>
-                    <span className="font-black text-slate-900 text-base">{m.total}</span>
-                  </div>
-                  <ChevronRight size={14} className="text-slate-300 hidden sm:block" />
-                  <div>
-                    <span className="text-amber-800 font-bold uppercase tracking-wider text-xxs block">No Café</span>
-                    <span className="font-black text-amber-600 text-base">{m.cafe} <span className="text-xxs font-normal text-slate-400">({m.taxaCafe})</span></span>
-                  </div>
-                  <ChevronRight size={14} className="text-slate-300 hidden sm:block" />
-                  <div>
-                    <span className="text-emerald-800 font-bold uppercase tracking-wider text-xxs block">Membros</span>
-                    <span className="font-black text-emerald-600 text-base">{m.integrados} <span className="text-xxs font-normal text-slate-400">({m.taxaIgreja})</span></span>
+                  <div className="flex flex-wrap items-center gap-6 text-xs">
+                    <div>
+                      <span className="text-slate-400 font-bold uppercase tracking-wider text-xxs block">Visitou</span>
+                      <span className="font-black text-slate-900 text-base">{m.total}</span>
+                    </div>
+                    <ChevronRight size={14} className="text-slate-300 hidden sm:block" />
+                    <div>
+                      <span className="text-amber-800 font-bold uppercase tracking-wider text-xxs block">No Café</span>
+                      <span className="font-black text-amber-600 text-base">{m.cafe} <span className="text-xxs font-normal text-slate-400">({m.taxaCafe})</span></span>
+                    </div>
+                    <ChevronRight size={14} className="text-slate-300 hidden sm:block" />
+                    <div>
+                      <span className="text-emerald-800 font-bold uppercase tracking-wider text-xxs block">Membros</span>
+                      <span className="font-black text-emerald-600 text-base">{m.integrados} <span className="text-xxs font-normal text-slate-400">({m.taxaIgreja})</span></span>
+                    </div>
                   </div>
                 </div>
-              </div>
-            )
-          })}
+              )
+            })
+          )}
         </div>
       </div>
 
