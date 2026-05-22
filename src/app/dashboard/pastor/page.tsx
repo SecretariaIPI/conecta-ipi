@@ -1,4 +1,3 @@
-cat << 'EOF' > src/app/dashboard/pastor/page.tsx
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -159,5 +158,3 @@ export default function VisaoEstatisticaPastorPage() {
       </div>
     </div>
   )
-}
-EOF
