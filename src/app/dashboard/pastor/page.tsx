@@ -1,4 +1,3 @@
-cat << 'EOF' > src/app/dashboard/pastor/page.tsx
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -37,7 +36,6 @@ export default function VisaoEstatisticaPastorPage() {
   const [todosRegistros, setTodosRegistros] = useState<RegistroPipeline[]>([])
   const [mesFiltro, setMesFiltro] = useState<string>(new Date().toISOString().substring(0, 7))
   
-  // Estados calculados
   const [metricasAtuais, setMetricasAtuais] = useState<MetricasMes>({ total: 0, cafe: 0, integrados: 0, taxaCafe: '0%', taxaIgreja: '0%' })
   const [historicoMeses, setHistoricoMeses] = useState<{ [key: string]: MetricasMes }>({})
   const [pessoasNoMes, setPessoasNoMes] = useState<RegistroPipeline[]>([])
@@ -46,7 +44,6 @@ export default function VisaoEstatisticaPastorPage() {
     try {
       setLoading(true)
 
-      // Busca dados com o relacionamento do nome do visitante
       const { data, error } = await supabase
         .from('integracao_pipeline')
         .select(`
@@ -66,13 +63,13 @@ export default function VisaoEstatisticaPastorPage() {
 
       if (error) throw error
 
-      const registros formatados = (data || []).map((item: any) => ({
+      const registrosFormatados: RegistroPipeline[] = (data || []).map((item: any) => ({
         ...item,
         visitantes: Array.isArray(item.visitantes) ? item.visitantes[0] : item.visitantes
       }))
 
       setTodosRegistros(registrosFormatados)
-      calcularMétricasEHistorico(registrosFormatados)
+      calcularMetricasEHistorico(registrosFormatados)
 
     } catch (err) {
       console.error('Erro ao carregar dados pastorais:', err)
@@ -81,13 +78,12 @@ export default function VisaoEstatisticaPastorPage() {
     }
   }
 
-  function calcularMétricasEHistorico(registros: RegistroPipeline[]) {
+  function calcularMetricasEHistorico(registros: RegistroPipeline[]) {
     const mapaHistorico: { [key: string]: MetricasMes } = {}
 
-    // 1. Processa todos os registros para agrupar por mês de início
     registros.forEach(r => {
       if (!r.data_inicio) return
-      const mesAno = r.data_inicio.substring(0, 7) // Extrai 'YYYY-MM'
+      const mesAno = r.data_inicio.substring(0, 7)
 
       if (!mapaHistorico[mesAno]) {
         mapaHistorico[mesAno] = { total: 0, cafe: 0, integrados: 0, taxaCafe: '0%', taxaIgreja: '0%' }
@@ -103,7 +99,6 @@ export default function VisaoEstatisticaPastorPage() {
       }
     })
 
-    // 2. Calcula as taxas percentuais de cada mês do histórico
     Object.keys(mapaHistorico).forEach(mes => {
       const m = mapaHistorico[mes]
       m.taxaCafe = m.total > 0 ? ((m.cafe / m.total) * 100).toFixed(1) + '%' : '0%'
@@ -112,7 +107,6 @@ export default function VisaoEstatisticaPastorPage() {
 
     setHistoricoMeses(mapaHistorico)
 
-    // 3. Filtra as métricas e a lista de pessoas do mês selecionado atual
     const mAtual = mapaHistorico[mesFiltro] || { total: 0, cafe: 0, integrados: 0, taxaCafe: '0%', taxaIgreja: '0%' }
     setMetricasAtuais(mAtual)
 
@@ -126,7 +120,7 @@ export default function VisaoEstatisticaPastorPage() {
 
   useEffect(() => {
     if (todosRegistros.length > 0) {
-      calcularMétricasEHistorico(todosRegistros)
+      calcularMetricasEHistorico(todosRegistros)
     }
   }, [mesFiltro])
 
@@ -154,7 +148,6 @@ export default function VisaoEstatisticaPastorPage() {
   return (
     <div className="max-w-7xl mx-auto space-y-8 p-4 sm:p-6 lg:p-8">
       
-      {/* Cabeçalho */}
       <div className="border-b border-slate-200 pb-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-3xl font-black text-slate-900 flex items-center gap-3 tracking-tight">
@@ -168,7 +161,6 @@ export default function VisaoEstatisticaPastorPage() {
           </p>
         </div>
 
-        {/* Filtro Seletor Mensal */}
         <div className="flex items-center gap-2 bg-white border border-slate-200 px-3 py-2 rounded-xl shadow-xs">
           <Calendar size={16} className="text-slate-400" />
           <input 
@@ -180,7 +172,6 @@ export default function VisaoEstatisticaPastorPage() {
         </div>
       </div>
 
-      {/* Cards com Números Absolutos em Destaque */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs flex items-center justify-between">
           <div>
@@ -216,7 +207,6 @@ export default function VisaoEstatisticaPastorPage() {
         </div>
       </div>
 
-      {/* Tabela do Mês: Quem são, Etapas e Datas exatas */}
       <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
         <div>
           <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
@@ -271,7 +261,6 @@ export default function VisaoEstatisticaPastorPage() {
         </div>
       </div>
 
-      {/* Histórico Consolidado Mês a Mês */}
       <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
         <div>
           <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
@@ -329,4 +318,3 @@ export default function VisaoEstatisticaPastorPage() {
     </div>
   )
 }
-EOF
