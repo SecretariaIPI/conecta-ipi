@@ -14,8 +14,8 @@ interface RegistroPipeline {
   visitante_id: string
   etapa: string
   integrado: boolean
-  data_inicio: string
-  data_ultima_movimentacao: string
+  data_inicio: string | null
+  data_ultima_movimentacao: string | null
   observacao: string
   visitantes?: {
     nome: string
@@ -34,7 +34,7 @@ interface MetricasMes {
 export default function VisaoEstatisticaPastorPage() {
   const [loading, setLoading] = useState(true)
   const [todosRegistros, setTodosRegistros] = useState<RegistroPipeline[]>([])
-  const [mesFiltro, setMesFiltro] = useState<string>('TODOS') // Alterado para começar mostrando tudo por padrão
+  const [mesFiltro, setMesFiltro] = useState<string>('TODOS')
   
   const [metricasAtuais, setMetricasAtuais] = useState<MetricasMes>({ total: 0, cafe: 0, integrados: 0, taxaCafe: '0%', taxaIgreja: '0%' })
   const [historicoMeses, setHistoricoMeses] = useState<{ [key: string]: MetricasMes }>({})
@@ -44,6 +44,7 @@ export default function VisaoEstatisticaPastorPage() {
     try {
       setLoading(true)
 
+      // Chamada direta para a tabela integracao_pipeline
       const { data, error } = await supabase
         .from('integracao_pipeline')
         .select(`
@@ -59,20 +60,28 @@ export default function VisaoEstatisticaPastorPage() {
             telefone
           )
         `)
-        .order('data_ultima_movimentacao', { ascending: false })
 
       if (error) throw error
 
-      const registrosFormatados: RegistroPipeline[] = (data || []).map((item: any) => ({
-        ...item,
-        visitantes: Array.isArray(item.visitantes) ? item.visitantes[0] : item.visitantes
-      }))
+      // DIAGNÓSTICO: Mostra o que veio do banco no F12 do navegador
+      console.log("=== DADOS BRUTOS DO SUPABASE ===", data)
+
+      const registrosFormatados: RegistroPipeline[] = (data || []).map((item: any) => {
+        let dadosVisitante = null
+        if (item.visitantes) {
+          dadosVisitante = Array.isArray(item.visitantes) ? item.visitantes[0] : item.visitantes
+        }
+        return {
+          ...item,
+          visitantes: dadosVisitante
+        }
+      })
 
       setTodosRegistros(registrosFormatados)
       processarMetricasETabela(registrosFormatados, 'TODOS')
 
     } catch (err) {
-      console.error('Erro ao carregar dados pastorais:', err)
+      console.error('Erro detalhado na busca do banco:', err)
     } finally {
       setLoading(false)
     }
@@ -81,21 +90,21 @@ export default function VisaoEstatisticaPastorPage() {
   function processarMetricasETabela(registros: RegistroPipeline[], filtro: string) {
     const mapaHistorico: { [key: string]: MetricasMes } = {}
     
-    // Métricas gerais para a opção 'TODOS'
     let gTotal = 0
     let gCafe = 0
     let gIntegrados = 0
 
     registros.forEach(r => {
-      // Conta globais
       gTotal++
-      const alcancouCafe = r.etapa?.toUpperCase().includes('CAF') || r.etapa?.toUpperCase().includes('CONSOLIDACAO') || r.integrado
+      const etapaTexto = r.etapa ? String(r.etapa).toUpperCase() : ''
+      const alcancouCafe = etapaTexto.includes('CAF') || etapaTexto.includes('CONSOLIDACAO') || r.integrado === true
+      
       if (alcancouCafe) gCafe++
-      if (r.integrado) gIntegrados++
+      if (r.integrado === true) gIntegrados++
 
-      // Agrupa no histórico mensal se houver data
-      if (!r.data_inicio) return
-      const mesAno = r.data_inicio.substring(0, 7) // Pega 'YYYY-MM'
+      // Define um mês padrão se data_inicio for nulo para não quebrar o mapeamento
+      const stringData = r.data_inicio || r.data_ultima_movimentacao || new Date().toISOString()
+      const mesAno = stringData.substring(0, 7)
 
       if (!mapaHistorico[mesAno]) {
         mapaHistorico[mesAno] = { total: 0, cafe: 0, integrados: 0, taxaCafe: '0%', taxaIgreja: '0%' }
@@ -103,10 +112,9 @@ export default function VisaoEstatisticaPastorPage() {
 
       mapaHistorico[mesAno].total += 1
       if (alcancouCafe) mapaHistorico[mesAno].cafe += 1
-      if (r.integrado) mapaHistorico[mesAno].integrados += 1
+      if (r.integrado === true) mapaHistorico[mesAno].integrados += 1
     })
 
-    // Calcula percentuais do histórico
     Object.keys(mapaHistorico).forEach(mes => {
       const m = mapaHistorico[mes]
       m.taxaCafe = m.total > 0 ? ((m.cafe / m.total) * 100).toFixed(1) + '%' : '0%'
@@ -114,7 +122,6 @@ export default function VisaoEstatisticaPastorPage() {
     })
     setHistoricoMeses(mapaHistorico)
 
-    // Define o que exibir nos cards superiores e tabela baseado no filtro selecionado
     if (filtro === 'TODOS') {
       setMetricasAtuais({
         total: gTotal,
@@ -127,7 +134,10 @@ export default function VisaoEstatisticaPastorPage() {
     } else {
       const mMes = mapaHistorico[filtro] || { total: 0, cafe: 0, integrados: 0, taxaCafe: '0%', taxaIgreja: '0%' }
       setMetricasAtuais(mMes)
-      setPessoasFiltradas(registros.filter(r => r.data_inicio && r.data_inicio.startsWith(filtro)))
+      setPessoasFiltradas(registros.filter(r => {
+        const d = r.data_inicio || r.data_ultima_movimentacao || ''
+        return d.startsWith(filtro)
+      }))
     }
   }
 
@@ -143,12 +153,15 @@ export default function VisaoEstatisticaPastorPage() {
   function formatarData(dataString: string | null) {
     if (!dataString) return '-'
     const data = new Date(dataString)
+    if (isNaN(data.getTime())) return '-'
     return data.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
   }
 
   function converterMesNome(mesAno: string) {
     if (mesAno === 'TODOS') return 'Todo o Período'
-    const [ano, mes] = mesAno.split('-')
+    const partes = mesAno.split('-')
+    if (partes.length < 2) return mesAno
+    const [ano, mes] = partes
     const meses = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
     return `${meses[parseInt(mes) - 1]} de ${ano}`
   }
@@ -179,7 +192,7 @@ export default function VisaoEstatisticaPastorPage() {
           </p>
         </div>
 
-        {/* Filtro Seleção Período */}
+        {/* Filtros */}
         <div className="flex items-center gap-3 bg-white border border-slate-200 px-3 py-1.5 rounded-xl shadow-xs">
           <button 
             onClick={() => lidarComMudancaFiltro('TODOS')}
@@ -202,7 +215,7 @@ export default function VisaoEstatisticaPastorPage() {
         </div>
       </div>
 
-      {/* Cards Indicadores */}
+      {/* Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs flex items-center justify-between">
           <div>
@@ -238,7 +251,7 @@ export default function VisaoEstatisticaPastorPage() {
         </div>
       </div>
 
-      {/* Tabela de Pessoas */}
+      {/* Tabela */}
       <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
         <div>
           <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
@@ -293,7 +306,7 @@ export default function VisaoEstatisticaPastorPage() {
         </div>
       </div>
 
-      {/* Histórico Consolidado Mês a Mês */}
+      {/* Histórico */}
       <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
         <div>
           <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
@@ -305,7 +318,7 @@ export default function VisaoEstatisticaPastorPage() {
 
         <div className="grid grid-cols-1 gap-3">
           {Object.keys(historicoMeses).length === 0 ? (
-            <p className="text-xs text-slate-400 py-2">Nenhum histórico mensal pôde ser gerado (verifique as datas de ingresso no banco).</p>
+            <p className="text-xs text-slate-400 py-2">Nenhum histórico mensal gerado.</p>
           ) : (
             Object.keys(historicoMeses).sort((a, b) => b.localeCompare(a)).map((mes) => {
               const m = historicoMeses[mes]
