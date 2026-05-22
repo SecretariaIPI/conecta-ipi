@@ -11,16 +11,12 @@ const supabase = createClient(
 
 interface RegistroPipeline {
   id: string
-  visitante_id: string
+  nome: string
+  telefone: string | null
   etapa: string
   integrado: boolean
-  data_inicio: string | null
-  data_ultima_movimentacao: string | null
-  observacao: string
-  visitantes?: {
-    nome: string
-    telefone?: string
-  }
+  data_inicio: string
+  data_ultima_movimentacao: string
 }
 
 interface MetricasMes {
@@ -44,36 +40,36 @@ export default function VisaoEstatisticaPastorPage() {
     try {
       setLoading(true)
 
-      // Chamada direta para a tabela integracao_pipeline
-      const { data, error } = await supabase
-        .from('integracao_pipeline')
-        .select(`
-          id,
-          visitante_id,
-          etapa,
-          integrado,
-          data_inicio,
-          data_ultima_movimentacao,
-          observacao,
-          visitantes (
-            nome,
-            telefone
-          )
-        `)
+      // Tentativa 1: Buscar da tabela 'visitantes' que é o padrão do sistema
+      let { data, error } = await supabase
+        .from('visitantes')
+        .select('*')
 
-      if (error) throw error
-
-      // DIAGNÓSTICO: Mostra o que veio do banco no F12 do navegador
-      console.log("=== DADOS BRUTOS DO SUPABASE ===", data)
-
-      const registrosFormatados: RegistroPipeline[] = (data || []).map((item: any) => {
-        let dadosVisitante = null
-        if (item.visitantes) {
-          dadosVisitante = Array.isArray(item.visitantes) ? item.visitantes[0] : item.visitantes
+      // Se der erro ou vier vazio, tenta na tabela 'pessoas'
+      if (error || !data || data.length === 0) {
+        const respostaAlternativa = await supabase.from('pessoas').select('*')
+        if (!respostaAlternativa.error && respostaAlternativa.data) {
+          data = respostaAlternativa.data
         }
+      }
+
+      console.log("=== DADOS ENCONTRADOS NA PASTA PASTOR ===", data)
+
+      // Normaliza as propriedades vindas do banco (etapa, integrado, etc)
+      const registrosFormatados: RegistroPipeline[] = (data || []).map((item: any) => {
+        // Mapeia os campos caso usem snake_case ou formatos diferentes no banco
+        const statusEtapa = item.etapa || item.status || 'Visitante'
+        const ehIntegrado = item.integrado === true || String(item.status || '').toUpperCase() === 'INTEGRADO' || item.membresia === true
+        const dataCriacao = item.data_inicio || item.created_at || new Date().toISOString()
+
         return {
-          ...item,
-          visitantes: dadosVisitante
+          id: item.id,
+          nome: item.nome || 'Não identificado',
+          telefone: item.telefone || item.celular || 'Sem contato',
+          etapa: statusEtapa,
+          integrado: ehIntegrado,
+          data_inicio: dataCriacao,
+          data_ultima_movimentacao: item.updated_at || dataCriacao
         }
       })
 
@@ -81,7 +77,7 @@ export default function VisaoEstatisticaPastorPage() {
       processarMetricasETabela(registrosFormatados, 'TODOS')
 
     } catch (err) {
-      console.error('Erro detalhado na busca do banco:', err)
+      console.error('Erro pastoral crítico:', err)
     } finally {
       setLoading(false)
     }
@@ -96,15 +92,13 @@ export default function VisaoEstatisticaPastorPage() {
 
     registros.forEach(r => {
       gTotal++
-      const etapaTexto = r.etapa ? String(r.etapa).toUpperCase() : ''
-      const alcancouCafe = etapaTexto.includes('CAF') || etapaTexto.includes('CONSOLIDACAO') || r.integrado === true
-      
-      if (alcancouCafe) gCafe++
-      if (r.integrado === true) gIntegrados++
+      const txtEtapa = String(r.etapa).toUpperCase()
+      const alcancouCafe = txtEtapa.includes('CAF') || txtEtapa.includes('CONSOLIDACAO') || r.integrado
 
-      // Define um mês padrão se data_inicio for nulo para não quebrar o mapeamento
-      const stringData = r.data_inicio || r.data_ultima_movimentacao || new Date().toISOString()
-      const mesAno = stringData.substring(0, 7)
+      if (alcancouCafe) gCafe++
+      if (r.integrado) gIntegrados++
+
+      const mesAno = r.data_inicio.substring(0, 7)
 
       if (!mapaHistorico[mesAno]) {
         mapaHistorico[mesAno] = { total: 0, cafe: 0, integrados: 0, taxaCafe: '0%', taxaIgreja: '0%' }
@@ -112,7 +106,7 @@ export default function VisaoEstatisticaPastorPage() {
 
       mapaHistorico[mesAno].total += 1
       if (alcancouCafe) mapaHistorico[mesAno].cafe += 1
-      if (r.integrado === true) mapaHistorico[mesAno].integrados += 1
+      if (r.integrado) mapaHistorico[mesAno].integrados += 1
     })
 
     Object.keys(mapaHistorico).forEach(mes => {
@@ -134,10 +128,7 @@ export default function VisaoEstatisticaPastorPage() {
     } else {
       const mMes = mapaHistorico[filtro] || { total: 0, cafe: 0, integrados: 0, taxaCafe: '0%', taxaIgreja: '0%' }
       setMetricasAtuais(mMes)
-      setPessoasFiltradas(registros.filter(r => {
-        const d = r.data_inicio || r.data_ultima_movimentacao || ''
-        return d.startsWith(filtro)
-      }))
+      setPessoasFiltradas(registros.filter(r => r.data_inicio && r.data_inicio.startsWith(filtro)))
     }
   }
 
@@ -170,7 +161,7 @@ export default function VisaoEstatisticaPastorPage() {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center gap-2 text-slate-400 text-sm">
         <Loader2 className="animate-spin text-indigo-600" size={32} />
-        <span className="font-semibold tracking-wide">Sincronizando histórico analítico...</span>
+        <span className="font-semibold tracking-wide">Sincronizando dados vitais...</span>
       </div>
     )
   }
@@ -178,7 +169,7 @@ export default function VisaoEstatisticaPastorPage() {
   return (
     <div className="max-w-7xl mx-auto space-y-8 p-4 sm:p-6 lg:p-8">
       
-      {/* Cabeçalho */}
+      {/* Header */}
       <div className="border-b border-slate-200 pb-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-3xl font-black text-slate-900 flex items-center gap-3 tracking-tight">
@@ -215,7 +206,7 @@ export default function VisaoEstatisticaPastorPage() {
         </div>
       </div>
 
-      {/* Cards */}
+      {/* Cards Indicadores */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs flex items-center justify-between">
           <div>
@@ -281,8 +272,8 @@ export default function VisaoEstatisticaPastorPage() {
                 pessoasFiltradas.map((p) => (
                   <tr key={p.id} className="hover:bg-slate-50/50 transition-colors">
                     <td className="py-3.5 px-4">
-                      <p className="font-bold text-slate-900">{p.visitantes?.nome || 'Não identificado'}</p>
-                      <p className="text-slate-400 text-xxs font-medium">{p.visitantes?.telefone || 'Sem contato'}</p>
+                      <p className="font-bold text-slate-900">{p.nome}</p>
+                      <p className="text-slate-400 text-xxs font-medium">{p.telefone}</p>
                     </td>
                     <td className="py-3.5 px-4 text-slate-500 font-semibold">{formatarData(p.data_inicio)}</td>
                     <td className="py-3.5 px-4 text-center">
