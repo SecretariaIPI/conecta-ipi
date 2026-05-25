@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@supabase/supabase-js'
-import { BarChart3, Users, TrendingUp, Coffee, CheckCircle2, Loader2, Award, Calendar, ChevronRight, Clock } from 'lucide-react'
+import { BarChart3, Users, TrendingUp, Coffee, CheckCircle2, Loader2, Award, Calendar, ChevronRight, Clock, FilterX } from 'lucide-react'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || '',
@@ -32,6 +32,7 @@ export default function VisaoEstatisticaPastorPage() {
   const [loading, setLoading] = useState(true)
   const [todosRegistros, setTodosRegistros] = useState<RegistroPipeline[]>([])
   const [mesFiltro, setMesFiltro] = useState<string>('TODOS')
+  const [subFiltroEtapa, setSubFiltroEtapa] = useState<'TODOS' | 'CAFE' | 'INTEGRADO'>('TODOS')
   
   const [metricasAtuais, setMetricasAtuais] = useState<MetricasMes>({ total: 0, cafe: 0, integrados: 0, taxaCafe: '0%', taxaIgreja: '0%' })
   const [historicoMeses, setHistoricoMeses] = useState<{ [key: string]: MetricasMes }>({})
@@ -54,15 +55,11 @@ export default function VisaoEstatisticaPastorPage() {
 
       const registrosFormatados: RegistroPipeline[] = (data || []).map((item: any) => {
         const dataCriacao = item.data_inicio || item.created_at || new Date().toISOString()
-        
-        // MAPEAMENTO DE REGRA: Detecta a Fernanda Guidorizzi para integrá-la conforme o Dashboard
         const ehFernanda = String(item.nome || '').toUpperCase().includes('FERNANDA')
 
-        // Se for a Fernanda, ela está integrada (e consequentemente passou pelo café)
         const ehIntegrado = item.integrado === true || item.integrados === true || ehFernanda
         const alcancouCafe = item.cafe === true || item.confirmado_cafe === true || ehFernanda
 
-        // Ajusta as tags textuais para exibição na tabela de forma limpa
         let textoEtapaExibicao = item.etapa || 'Visitante'
         if (ehIntegrado) {
           textoEtapaExibicao = 'Integrado na Igreja'
@@ -83,7 +80,7 @@ export default function VisaoEstatisticaPastorPage() {
       })
 
       setTodosRegistros(registrosFormatados)
-      processarMetricasETabela(registrosFormatados, 'TODOS')
+      processarMetricasETabela(registrosFormatados, 'TODOS', 'TODOS')
 
     } catch (err) {
       console.error('Erro na sincronização estatística pastoral:', err)
@@ -92,7 +89,7 @@ export default function VisaoEstatisticaPastorPage() {
     }
   }
 
-  function processarMetricasETabela(registros: RegistroPipeline[], filtro: string) {
+  function processarMetricasETabela(registros: RegistroPipeline[], filtroMes: string, filtroEtapa: 'TODOS' | 'CAFE' | 'INTEGRADO') {
     const mapaHistorico: { [key: string]: MetricasMes } = {}
     
     let gTotal = 0
@@ -122,7 +119,7 @@ export default function VisaoEstatisticaPastorPage() {
     })
     setHistoricoMeses(mapaHistorico)
 
-    if (filtro === 'TODOS') {
+    if (filtroMes === 'TODOS') {
       setMetricasAtuais({
         total: gTotal,
         cafe: gCafe,
@@ -130,21 +127,37 @@ export default function VisaoEstatisticaPastorPage() {
         taxaCafe: gTotal > 0 ? ((gCafe / gTotal) * 100).toFixed(1) + '%' : '0%',
         taxaIgreja: gTotal > 0 ? ((gIntegrados / gTotal) * 100).toFixed(1) + '%' : '0%'
       })
-      setPessoasFiltradas(registros)
     } else {
-      const mMes = mapaHistorico[filtro] || { total: 0, cafe: 0, integrados: 0, taxaCafe: '0%', taxaIgreja: '0%' }
+      const mMes = mapaHistorico[filtroMes] || { total: 0, cafe: 0, integrados: 0, taxaCafe: '0%', taxaIgreja: '0%' }
       setMetricasAtuais(mMes)
-      setPessoasFiltradas(registros.filter(r => r.data_inicio && r.data_inicio.startsWith(filtro)))
     }
+
+    // Aplicação combinada de filtros para a tabela nominativa
+    let resultado = [...registros]
+    if (filtroMes !== 'TODOS') {
+      resultado = resultado.filter(r => r.data_inicio && r.data_inicio.startsWith(filtroMes))
+    }
+    if (filtroEtapa === 'CAFE') {
+      resultado = resultado.filter(r => r.passouCafe)
+    } else if (filtroEtapa === 'INTEGRADO') {
+      resultado = resultado.filter(r => r.integrado)
+    }
+
+    setPessoasFiltradas(resultado)
   }
 
   useEffect(() => {
     carregarDadosPipeline()
   }, [])
 
-  function lidarComMudancaFiltro(novoFiltro: string) {
-    setMesFiltro(novoFiltro)
-    processarMetricasETabela(todosRegistros, novoFiltro)
+  function lidarComMudancaFiltroMes(novoFiltroMes: string) {
+    setMesFiltro(novoFiltroMes)
+    processarMetricasETabela(todosRegistros, novoFiltroMes, subFiltroEtapa)
+  }
+
+  function lidarComMudancaSubFiltro(novoFiltroEtapa: 'TODOS' | 'CAFE' | 'INTEGRADO') {
+    setSubFiltroEtapa(novoFiltroEtapa)
+    processarMetricasETabela(todosRegistros, mesFiltro, novoFiltroEtapa)
   }
 
   function formatarData(dataString: string | null) {
@@ -189,10 +202,10 @@ export default function VisaoEstatisticaPastorPage() {
           </p>
         </div>
 
-        {/* Filtros */}
+        {/* Filtros de Período */}
         <div className="flex items-center gap-3 bg-white border border-slate-200 px-3 py-1.5 rounded-xl shadow-xs">
           <button 
-            onClick={() => lidarComMudancaFiltro('TODOS')}
+            onClick={() => lidarComMudancaFiltroMes('TODOS')}
             className={`text-xxs font-black px-2.5 py-1 rounded-md transition-colors ${mesFiltro === 'TODOS' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:bg-slate-100'}`}
           >
             VER TUDO
@@ -204,7 +217,7 @@ export default function VisaoEstatisticaPastorPage() {
               type="month" 
               value={mesFiltro === 'TODOS' ? '' : mesFiltro}
               onChange={(e) => {
-                if (e.target.value) lidarComMudancaFiltro(e.target.value)
+                if (e.target.value) lidarComMudancaFiltroMes(e.target.value)
               }}
               className="text-xs font-bold text-slate-700 outline-none border-none bg-transparent cursor-pointer"
             />
@@ -212,50 +225,85 @@ export default function VisaoEstatisticaPastorPage() {
         </div>
       </div>
 
-      {/* Cards Indicadores */}
+      {/* Cards Indicadores Interativos e Corrigidos */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs flex items-center justify-between">
+        <div 
+          onClick={() => lidarComMudancaSubFiltro('TODOS')}
+          className={`border rounded-2xl p-6 shadow-xs flex items-center justify-between cursor-pointer transition-all transform hover:scale-101 active:scale-99 ${
+            subFiltroEtapa === 'TODOS' ? 'bg-indigo-50/50 border-indigo-400 ring-2 ring-indigo-600/10' : 'bg-white border-slate-200 hover:border-slate-300'
+          }`}
+        >
           <div>
             <p className="text-slate-400 text-xxs font-bold uppercase tracking-wider">Visitantes no Período</p>
-            <h3 className="text-4xl font-black text-slate-900 mt-1">{metricasAtuais.total} <span className="text-sm font-normal text-slate-400">almas</span></h3>
-            <p className="text-xs text-indigo-600 font-semibold mt-1">Recepção ativa mapeada</p>
+            {/* Ajustado de "almas" para "pessoas" */}
+            <h3 className="text-4xl font-black text-slate-900 mt-1">{metricasAtuais.total} <span className="text-sm font-normal text-slate-400">pessoas</span></h3>
+            <p className="text-xs text-indigo-600 font-semibold mt-1">
+              {subFiltroEtapa === 'TODOS' ? '● Exibindo todos na tabela' : 'Clique para ver todos'}
+            </p>
           </div>
-          <div className="bg-slate-50 text-slate-400 p-3 rounded-xl border border-slate-100">
+          <div className={`p-3 rounded-xl border ${subFiltroEtapa === 'TODOS' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-slate-50 text-slate-400 border-slate-100'}`}>
             <Users size={22} />
           </div>
         </div>
 
-        <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs flex items-center justify-between">
+        <div 
+          onClick={() => lidarComMudancaSubFiltro('CAFE')}
+          className={`border rounded-2xl p-6 shadow-xs flex items-center justify-between cursor-pointer transition-all transform hover:scale-101 active:scale-99 ${
+            subFiltroEtapa === 'CAFE' ? 'bg-amber-50/60 border-amber-400 ring-2 ring-amber-600/10' : 'bg-white border-slate-200 hover:border-slate-300'
+          }`}
+        >
           <div>
             <p className="text-amber-800 text-xxs font-bold uppercase tracking-wider">Avançaram para o Café</p>
             <h3 className="text-4xl font-black text-amber-600 mt-1">{metricasAtuais.cafe} <span className="text-sm font-normal text-slate-400">pessoas</span></h3>
-            <p className="text-xs text-amber-700 font-semibold mt-1">Taxa de conversão: {metricasAtuais.taxaCafe}</p>
+            <p className="text-xs text-amber-700 font-semibold mt-1">
+              {subFiltroEtapa === 'CAFE' ? '● Filtrando apenas Café na tabela' : `Taxa de conversão: ${metricasAtuais.taxaCafe}`}
+            </p>
           </div>
-          <div className="bg-amber-50 text-amber-600 p-3 rounded-xl border border-amber-100">
+          <div className={`p-3 rounded-xl border ${subFiltroEtapa === 'CAFE' ? 'bg-amber-600 text-white border-amber-600' : 'bg-amber-50 text-amber-600 border-amber-100'}`}>
             <Coffee size={22} />
           </div>
         </div>
 
-        <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs flex items-center justify-between">
+        <div 
+          onClick={() => lidarComMudancaSubFiltro('INTEGRADO')}
+          className={`border rounded-2xl p-6 shadow-xs flex items-center justify-between cursor-pointer transition-all transform hover:scale-101 active:scale-99 ${
+            subFiltroEtapa === 'INTEGRADO' ? 'bg-emerald-50/60 border-emerald-400 ring-2 ring-emerald-600/10' : 'bg-white border-slate-200 hover:border-slate-300'
+          }`}
+        >
           <div>
             <p className="text-emerald-800 text-xxs font-bold uppercase tracking-wider">Total de Integrados</p>
             <h3 className="text-4xl font-black text-emerald-600 mt-1">{metricasAtuais.integrados} <span className="text-sm font-normal text-slate-400">membros</span></h3>
-            <p className="text-xs text-emerald-700 font-semibold mt-1">Eficiência de membresia: {metricasAtuais.taxaIgreja}</p>
+            <p className="text-xs text-emerald-700 font-semibold mt-1">
+              {subFiltroEtapa === 'INTEGRADO' ? '● Filtrando Membros na tabela' : `Eficiência: ${metricasAtuais.taxaIgreja}`}
+            </p>
           </div>
-          <div className="bg-emerald-50 text-emerald-600 p-3 rounded-xl border border-emerald-100">
+          <div className={`p-3 rounded-xl border ${subFiltroEtapa === 'INTEGRADO' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-emerald-50 text-emerald-600 border-emerald-100'}`}>
             <Award size={22} />
           </div>
         </div>
       </div>
 
-      {/* Tabela de Dados */}
+      {/* Tabela de Dados Dinâmica */}
       <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
-        <div>
-          <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-            <Clock className="text-indigo-600" size={18} />
-            Movimentações Detalhadas ({converterMesNome(mesFiltro)})
-          </h2>
-          <p className="text-xs text-slate-500">Listagem nominativa com datas de entrada e última alteração pastoral.</p>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <div>
+            <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+              <Clock className="text-indigo-600" size={18} />
+              Movimentações Detalhadas ({converterMesNome(mesFiltro)})
+            </h2>
+            <p className="text-xs text-slate-500">Listagem nominativa baseada nas seleções de data e indicadores acima.</p>
+          </div>
+
+          {/* Botão para limpar sub-filtro ativo */}
+          {subFiltroEtapa !== 'TODOS' && (
+            <button 
+              onClick={() => lidarComMudancaSubFiltro('TODOS')}
+              className="self-start sm:self-center flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xxs font-bold px-2.5 py-1 rounded-md transition-colors"
+            >
+              <FilterX size={12} />
+              LIMPAR FILTRO DE CARD
+            </button>
+          )}
         </div>
 
         <div className="overflow-x-auto">
@@ -272,7 +320,7 @@ export default function VisaoEstatisticaPastorPage() {
             <tbody className="divide-y divide-slate-100 text-xs font-medium text-slate-700">
               {pessoasFiltradas.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="py-8 text-center text-slate-400 font-normal">Nenhum registro encontrado para o filtro selecionado.</td>
+                  <td colSpan={5} className="py-8 text-center text-slate-400 font-normal">Nenhum registro corresponde a essa combinação de filtros.</td>
                 </tr>
               ) : (
                 pessoasFiltradas.map((p) => (
@@ -297,8 +345,10 @@ export default function VisaoEstatisticaPastorPage() {
                     <td className="py-3.5 px-4">
                       {p.integrado ? (
                         <span className="text-emerald-600 font-bold flex items-center gap-1"><CheckCircle2 size={14} /> Integrado</span>
+                      ) : p.passouCafe ? (
+                        <span className="text-amber-600 font-bold flex items-center gap-1"><Coffee size={14} /> No Café</span>
                       ) : (
-                        <span className="text-amber-600 font-bold flex items-center gap-1"><Clock size={14} /> Em Processo</span>
+                        <span className="text-slate-500 font-bold flex items-center gap-1"><Clock size={14} /> Visitante</span>
                       )}
                     </td>
                   </tr>
@@ -309,7 +359,7 @@ export default function VisaoEstatisticaPastorPage() {
         </div>
       </div>
 
-      {/* Histórico Mensal */}
+      {/* Evolução Histórica */}
       <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
         <div>
           <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
@@ -328,7 +378,7 @@ export default function VisaoEstatisticaPastorPage() {
               return (
                 <div 
                   key={mes}
-                  onClick={() => lidarComMudancaFiltro(mes)}
+                  onClick={() => lidarComMudancaFiltroMes(mes)}
                   className={`p-4 border rounded-xl flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 cursor-pointer transition transform active:scale-98 ${
                     mesFiltro === mes 
                       ? 'border-indigo-600 bg-indigo-50/20 shadow-xs' 
