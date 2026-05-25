@@ -1,4 +1,4 @@
-import '@/app/globals.css'
+import './globals.css'
 import Link from 'next/link'
 import {
   LayoutDashboard,
@@ -18,7 +18,7 @@ export const metadata = {
 
 const menu = [
   { nome: 'Dashboard', href: '/', icon: LayoutDashboard },
-  { nome: 'Visão do Pastor', href="/dashboard/pastor", icon: BarChart3 },
+  { nome: 'Visão do Pastor', href:"/dashboard/pastor", icon: BarChart3 },
   { nome: 'Pessoas', href: '/pessoas', icon: Users },
   { nome: 'Visitantes', href: '/visitantes', icon: UserPlus },
   { nome: 'Aniversários', href: '/aniversarios', icon: Cake },
