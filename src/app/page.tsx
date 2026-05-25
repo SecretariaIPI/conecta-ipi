@@ -53,7 +53,7 @@ export default function DashboardPage() {
 
         {/* Card 2: Dashboard Pastoral */}
         <Link
-          href="/dashboard/pastor"
+          href="/dashboard/pastor/acompanhamento"
           className="group relative bg-gradient-to-br from-blue-600 to-indigo-700 text-white rounded-2xl p-6 shadow-md shadow-blue-700/10 flex flex-col justify-between overflow-hidden transition duration-200 active:scale-[0.99]"
         >
           <div className="absolute -right-6 -bottom-6 text-blue-500/20 transform group-hover:scale-110 group-hover:-rotate-12 transition duration-500 pointer-events-none">
