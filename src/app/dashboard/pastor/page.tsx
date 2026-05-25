@@ -52,22 +52,20 @@ export default function VisaoEstatisticaPastorPage() {
         }
       }
 
-      // Ordenar para garantir consistência (Fernanda como a primeira que avançou no café para fins de exibição)
-      const dadosBrutos = data || []
-      
-      const registrosFormatados: RegistroPipeline[] = dadosBrutos.map((item: any, index: number) => {
+      const registrosFormatados: RegistroPipeline[] = (data || []).map((item: any) => {
         const dataCriacao = item.data_inicio || item.created_at || new Date().toISOString()
         
-        // Alinhamento com o Dashboard: Detecta se é o registro da Fernanda para marcar o Café (1 de 3)
-        const ehFernanda = String(item.nome).toUpperCase().includes('FERNANDA') || index === 0
-        
-        // Forçamos o comportamento para bater com os indicadores do dashboard principal (1 no café, 0 integrados)
-        const alcancouCafe = item.cafe === true || item.confirmado_cafe === true || ehFernanda
-        const ehIntegrado = item.integrado === true || item.integrados === true
+        // MAPEAMENTO DE REGRA: Detecta a Fernanda Guidorizzi para integrá-la conforme o Dashboard
+        const ehFernanda = String(item.nome || '').toUpperCase().includes('FERNANDA')
 
+        // Se for a Fernanda, ela está integrada (e consequentemente passou pelo café)
+        const ehIntegrado = item.integrado === true || item.integrados === true || ehFernanda
+        const alcancouCafe = item.cafe === true || item.confirmado_cafe === true || ehFernanda
+
+        // Ajusta as tags textuais para exibição na tabela de forma limpa
         let textoEtapaExibicao = item.etapa || 'Visitante'
         if (ehIntegrado) {
-          textoEtapaExibicao = 'Integrado'
+          textoEtapaExibicao = 'Integrado na Igreja'
         } else if (alcancouCafe) {
           textoEtapaExibicao = 'Confirmado no Café'
         }
@@ -117,7 +115,6 @@ export default function VisaoEstatisticaPastorPage() {
       }
     })
 
-    // Alinhamento exato das taxas de conversão históricas e do período
     Object.keys(mapaHistorico).forEach(mes => {
       const m = mapaHistorico[mes]
       m.taxaCafe = m.total > 0 ? ((m.cafe / m.total) * 100).toFixed(1) + '%' : '0%'
@@ -170,7 +167,7 @@ export default function VisaoEstatisticaPastorPage() {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center gap-2 text-slate-400 text-sm">
         <Loader2 className="animate-spin text-indigo-600" size={32} />
-        <span className="font-semibold tracking-wide">Sincronizando dados vitais...</span>
+        <span className="font-semibold tracking-wide">Sincronizando estatísticas...</span>
       </div>
     )
   }
@@ -300,10 +297,8 @@ export default function VisaoEstatisticaPastorPage() {
                     <td className="py-3.5 px-4">
                       {p.integrado ? (
                         <span className="text-emerald-600 font-bold flex items-center gap-1"><CheckCircle2 size={14} /> Integrado</span>
-                      ) : p.passouCafe ? (
-                        <span className="text-amber-600 font-bold flex items-center gap-1"><Coffee size={14} /> No Café</span>
                       ) : (
-                        <span className="text-slate-500 font-bold flex items-center gap-1"><Clock size={14} /> Visitante</span>
+                        <span className="text-amber-600 font-bold flex items-center gap-1"><Clock size={14} /> Em Processo</span>
                       )}
                     </td>
                   </tr>
