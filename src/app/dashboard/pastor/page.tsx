@@ -36,9 +36,8 @@ export default function VisaoEstatisticaPastorPage() {
   const [loading, setLoading] = useState(true)
   const [todosRegistros, setTodosRegistros] = useState<RegistroPipeline[]>([])
   const [mesFiltro, setMesFiltro] = useState<string>('TODOS')
-  const [subFiltroEtapa, setSubFiltroEtapa] = useState<'TODOS' | 'CAFE' | 'INTEGRADO'>('TODOS')
+  const [subFiltroEtapa, setSubFiltroEtapa] = useState<'TODOS' | 'VISITANTE' | 'CAFE' | 'INTEGRADO'>('TODOS')
   
-  // Novas ferramentas de busca e filtros específicos
   const [buscaTermo, setBuscaTermo] = useState<string>('')
   const [filtrarSemContato, setFiltrarSemContato] = useState<boolean>(false)
   const [filtrarEstagnados, setFiltrarEstagnados] = useState<boolean>(false)
@@ -101,7 +100,7 @@ export default function VisaoEstatisticaPastorPage() {
   function processarFiltrosEstatisticos(
     registros: RegistroPipeline[], 
     filtroMes: string, 
-    filtroEtapa: 'TODOS' | 'CAFE' | 'INTEGRADO',
+    filtroEtapa: 'TODOS' | 'VISITANTE' | 'CAFE' | 'INTEGRADO',
     termo: string,
     semContato: boolean,
     estagnados: boolean
@@ -112,7 +111,6 @@ export default function VisaoEstatisticaPastorPage() {
     let gCafe = 0
     let gIntegrados = 0
 
-    // Métricas calculadas sobre o todo
     registros.forEach(r => {
       gTotal++
       if (r.passouCafe) gCafe++
@@ -149,17 +147,20 @@ export default function VisaoEstatisticaPastorPage() {
       setMetricasAtuais(mMes)
     }
 
-    // Aplicação da cascata de filtros na tabela nominativa
     let resultado = [...registros]
     
     if (filtroMes !== 'TODOS') {
       resultado = resultado.filter(r => r.data_inicio && r.data_inicio.startsWith(filtroMes))
     }
-    if (filtroEtapa === 'CAFE') {
-      resultado = resultado.filter(r => r.passouCafe)
+    
+    if (filtroEtapa === 'VISITANTE') {
+      resultado = resultado.filter(r => !r.passouCafe && !r.integrado)
+    } else if (filtroEtapa === 'CAFE') {
+      resultado = resultado.filter(r => r.passouCafe && !r.integrado)
     } else if (filtroEtapa === 'INTEGRADO') {
       resultado = resultado.filter(r => r.integrado)
     }
+
     if (termo.trim() !== '') {
       const t = termo.toLowerCase()
       resultado = resultado.filter(r => 
@@ -181,7 +182,6 @@ export default function VisaoEstatisticaPastorPage() {
     carregarDadosPipeline()
   }, [])
 
-  // Auxiliar para contagem de tempo de estagnação
   function calcularDiasEstagnado(dataString: string): number {
     const ultimaMov = new Date(dataString)
     if (isNaN(ultimaMov.getTime())) return 0
@@ -197,10 +197,6 @@ export default function VisaoEstatisticaPastorPage() {
     setFiltrarSemContato(false)
     setFiltrarEstagnados(false)
     processarFiltrosEstatisticos(todosRegistros, 'TODOS', 'TODOS', '', false, false)
-  }
-
-  function dispararImpressaoRelatorio() {
-    window.print()
   }
 
   function formatarData(dataString: string | null) {
@@ -219,51 +215,109 @@ export default function VisaoEstatisticaPastorPage() {
     return `${meses[parseInt(mes) - 1]} de ${ano}`
   }
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center gap-2 text-slate-400 text-sm">
-        <Loader2 className="animate-spin text-indigo-600" size={32} />
-        <span className="font-semibold tracking-wide">Preparando ferramentas de gestão...</span>
-      </div>
-    )
+  function obterTituloFiltroAtivo() {
+    if (subFiltroEtapa === 'VISITANTE') return 'Acompanhamento: Visitantes'
+    if (subFiltroEtapa === 'CAFE') return 'Acompanhamento: Café'
+    if (subFiltroEtapa === 'INTEGRADO') return 'Acompanhamento: Integrados'
+    if (filtrarEstagnados) return 'Alerta: Pessoas Estagnadas (+14 dias)'
+    if (filtrarSemContato) return 'Alerta: Visitantes Sem Telefone'
+    return 'Consolidação Geral de Pessoas'
   }
+
+  // Quantidade exata baseada nos filtros de tempo selecionados para o card lateral
+  const numVisitantesApenasExclusivos = todosRegistros.filter(r => r.data_inicio.startsWith(mesFiltro === 'TODOS' ? '' : mesFiltro) && !r.passouCafe && !r.integrado).length
+
+  // CORREÇÃO DO GRÁFICO: O Topo do Funil sempre exibe 100% do volume de entradas filtradas
+  const totalGeralParaGrafico = metricasAtuais.total || 1
+  const pctVisitantes = '100' // Topo do funil representa a entrada total
+  const pctCafe = ((metricasAtuais.cafe / totalGeralParaGrafico) * 100).toFixed(0)
+  const pctIntegrados = ((metricasAtuais.integrados / totalGeralParaGrafico) * 100).toFixed(0)
 
   const possuiFiltroAtivo = mesFiltro !== 'TODOS' || subFiltroEtapa !== 'TODOS' || buscaTermo !== '' || filtrarSemContato || filtrarEstagnados
 
   return (
-    <div className="max-w-7xl mx-auto space-y-8 p-4 sm:p-6 lg:p-8 print:p-0 print:space-y-6">
+    <div className="max-w-7xl mx-auto space-y-8 p-4 sm:p-6 lg:p-8 print:p-0 print:m-0 print:max-w-full print:bg-white">
       
-      {/* Estilo injetado para otimizar a impressão do PDF profissional */}
       <style jsx global>{`
         @media print {
-          body { background: white; color: black; }
-          .print\\:hidden { display: none !important; }
-          tr { page-break-inside: avoid; }
+          aside, nav, header, .sidebar, .print\\:hidden, button, input, .no-print {
+            display: none !important;
+            width: 0 !important;
+            height: 0 !important;
+          }
+
+          main, body, .max-w-7xl {
+            padding: 0 !important;
+            margin: 0 !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            background: white !important;
+          }
+
+          .print-card-inactive {
+            display: none !important;
+          }
+
+          .print-card-active {
+            width: 100% !important;
+            border: 1px solid #cbd5e1 !important;
+            background-color: #f8fafc !important;
+            padding: 12px !important;
+          }
+
+          .print-graph-bar {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+
+          @page {
+            size: A4 portrait;
+            margin: 15mm 15mm;
+          }
+
+          table {
+            width: 100% !important;
+            border-collapse: collapse !important;
+            margin-top: 20px !important;
+          }
+          tr {
+            page-break-inside: avoid !important;
+          }
+          th {
+            background-color: #f1f5f9 !important;
+            color: #0f172a !important;
+            border-bottom: 2px solid #94a3b8 !important;
+            padding: 10px 8px !important;
+          }
+          td {
+            border-bottom: 1px solid #e2e8f0 !important;
+            padding: 10px 8px !important;
+          }
         }
       `}</style>
 
       {/* Cabeçalho */}
-      <div className="border-b border-slate-200 pb-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="border-b border-slate-200 pb-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 print:border-b-2 print:border-slate-900 print:pb-2">
         <div>
-          <h1 className="text-3xl font-black text-slate-900 flex items-center gap-3 tracking-tight">
-            <div className="bg-indigo-600 p-2 rounded-2xl text-white shadow-sm print:bg-black">
+          <h1 className="text-3xl font-black text-slate-900 flex items-center gap-3 tracking-tight print:text-2xl">
+            <div className="bg-indigo-600 p-2 rounded-2xl text-white shadow-sm print:hidden">
               <BarChart3 size={24} />
             </div>
-            Gabinete Analítico Pastoral
+            Relatório de Crescimento e Consolidação
           </h1>
-          <p className="text-slate-500 mt-2 text-sm font-medium">
-            Gerenciamento de jornadas, alertas de estagnação e filtros de consolidação.
+          <p className="text-indigo-600 font-bold text-sm mt-1 print:text-slate-800 print:text-xs">
+            Filtro Ativo: <span className="underline uppercase">{obterTituloFiltroAtivo()}</span> ({converterMesNome(mesFiltro)})
           </p>
         </div>
 
-        {/* Botão de Exportação e Filtro Base */}
+        {/* Botões Web */}
         <div className="flex flex-wrap items-center gap-3 print:hidden">
           <button
-            onClick={dispararImpressaoRelatorio}
-            className="flex items-center gap-2 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold px-4 py-2 border border-slate-200 rounded-xl shadow-xs transition-colors"
+            onClick={() => window.print()}
+            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-4 py-2 rounded-xl shadow-xs transition-colors"
           >
-            <Printer size={15} className="text-slate-500" />
-            GERAR RELATÓRIO PDF
+            <Printer size={15} />
+            IMPRIMIR RELATÓRIO
           </button>
 
           <div className="flex items-center gap-3 bg-white border border-slate-200 px-3 py-1.5 rounded-xl shadow-xs">
@@ -274,7 +328,7 @@ export default function VisaoEstatisticaPastorPage() {
               }}
               className={`text-xxs font-black px-2.5 py-1 rounded-md transition-colors ${mesFiltro === 'TODOS' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:bg-slate-100'}`}
             >
-              VER TUDO
+              TODO PERÍODO
             </button>
             <div className="h-4 w-px bg-slate-200"></div>
             <div className="flex items-center gap-1.5">
@@ -295,89 +349,152 @@ export default function VisaoEstatisticaPastorPage() {
         </div>
       </div>
 
-      {/* Cards Indicadores Interativos */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div 
-          onClick={() => {
-            const novaEtapa = subFiltroEtapa === 'TODOS' ? 'TODOS' : 'TODOS'
-            setSubFiltroEtapa('TODOS')
-            processarFiltrosEstatisticos(todosRegistros, mesFiltro, 'TODOS', buscaTermo, filtrarSemContato, filtrarEstagnados)
-          }}
-          className={`border rounded-2xl p-6 shadow-xs flex items-center justify-between transition-all transform ${
-            print ? '' : 'cursor-pointer hover:scale-101 active:scale-99'
-          } ${subFiltroEtapa === 'TODOS' ? 'bg-indigo-50/50 border-indigo-400 ring-2 ring-indigo-600/10' : 'bg-white border-slate-200'}`}
-        >
-          <div>
-            <p className="text-slate-400 text-xxs font-bold uppercase tracking-wider">Visitantes no Período</p>
-            <h3 className="text-4xl font-black text-slate-900 mt-1">{metricasAtuais.total} <span className="text-sm font-normal text-slate-400">pessoas</span></h3>
-            <p className="text-xs text-indigo-600 font-semibold mt-1 print:hidden">
-              {subFiltroEtapa === 'TODOS' ? '● Exibindo todos' : 'Clique para ver todos'}
-            </p>
-          </div>
-          <div className={`p-3 rounded-xl border ${subFiltroEtapa === 'TODOS' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-slate-50 text-slate-400 border-slate-100'}`}>
-            <Users size={22} />
-          </div>
+      {/* Gráfico do Funil com Correção de Escopo */}
+      <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 space-y-4 print:bg-white print:border print:p-4">
+        <div>
+          <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider print:text-xs">Gráfico do Funil de Crescimento</h3>
+          <p className="text-xxs text-slate-400 print:hidden">Exibição do total de entradas e taxas reais de conversão do ministério.</p>
         </div>
+        
+        <div className="space-y-3.5">
+          {/* Total de Visitantes que Entraram */}
+          <div className="space-y-1">
+            <div className="flex justify-between text-xs font-bold text-slate-700">
+              <span>Visitantes Cadastrados (Entrada do Funil)</span>
+              <span>{metricasAtuais.total} pessoas ({pctVisitantes}%)</span>
+            </div>
+            <div className="w-full bg-slate-200 rounded-full h-3.5 overflow-hidden">
+              <div 
+                className="bg-blue-500 h-3.5 rounded-full print-graph-bar transition-all" 
+                style={{ width: '100%' }}
+              ></div>
+            </div>
+          </div>
 
-        <div 
-          onClick={() => {
-            const novaEtapa = subFiltroEtapa === 'CAFE' ? 'TODOS' : 'CAFE'
-            setSubFiltroEtapa(novaEtapa)
-            processarFiltrosEstatisticos(todosRegistros, mesFiltro, novaEtapa, buscaTermo, filtrarSemContato, filtrarEstagnados)
-          }}
-          className={`border rounded-2xl p-6 shadow-xs flex items-center justify-between transition-all transform ${
-            print ? '' : 'cursor-pointer hover:scale-101 active:scale-99'
-          } ${subFiltroEtapa === 'CAFE' ? 'bg-amber-50/60 border-amber-400 ring-2 ring-amber-600/10' : 'bg-white border-slate-200'}`}
-        >
-          <div>
-            <p className="text-amber-800 text-xxs font-bold uppercase tracking-wider">Avançaram para o Café</p>
-            <h3 className="text-4xl font-black text-amber-600 mt-1">{metricasAtuais.cafe} <span className="text-sm font-normal text-slate-400">pessoas</span></h3>
-            <p className="text-xs text-amber-700 font-semibold mt-1 print:hidden">
-              {subFiltroEtapa === 'CAFE' ? '● Filtrando apenas Café' : `Taxa de conversão: ${metricasAtuais.taxaCafe}`}
-            </p>
+          {/* Quantos avançaram para o Café */}
+          <div className="space-y-1">
+            <div className="flex justify-between text-xs font-bold text-slate-700">
+              <span>Café</span>
+              <span>{metricasAtuais.cafe} pessoas ({pctCafe}%)</span>
+            </div>
+            <div className="w-full bg-slate-200 rounded-full h-3.5 overflow-hidden">
+              <div 
+                className="bg-amber-500 h-3.5 rounded-full print-graph-bar transition-all" 
+                style={{ width: `${Math.max(Number(pctCafe), 0)}%` }}
+              ></div>
+            </div>
           </div>
-          <div className={`p-3 rounded-xl border ${subFiltroEtapa === 'CAFE' ? 'bg-amber-600 text-white border-amber-600' : 'bg-amber-50 text-amber-600 border-amber-100'}`}>
-            <Coffee size={22} />
-          </div>
-        </div>
 
-        <div 
-          onClick={() => {
-            const novaEtapa = subFiltroEtapa === 'INTEGRADO' ? 'TODOS' : 'INTEGRADO'
-            setSubFiltroEtapa(novaEtapa)
-            processarFiltrosEstatisticos(todosRegistros, mesFiltro, novaEtapa, buscaTermo, filtrarSemContato, filtrarEstagnados)
-          }}
-          className={`border rounded-2xl p-6 shadow-xs flex items-center justify-between transition-all transform ${
-            print ? '' : 'cursor-pointer hover:scale-101 active:scale-99'
-          } ${subFiltroEtapa === 'INTEGRADO' ? 'bg-emerald-50/60 border-emerald-400 ring-2 ring-emerald-600/10' : 'bg-white border-slate-200'}`}
-        >
-          <div>
-            <p className="text-emerald-800 text-xxs font-bold uppercase tracking-wider">Total de Integrados</p>
-            <h3 className="text-4xl font-black text-emerald-600 mt-1">{metricasAtuais.integrados} <span className="text-sm font-normal text-slate-400">membros</span></h3>
-            <p className="text-xs text-emerald-700 font-semibold mt-1 print:hidden">
-              {subFiltroEtapa === 'INTEGRADO' ? '● Filtrando Membros' : `Eficiência: ${metricasAtuais.taxaIgreja}`}
-            </p>
-          </div>
-          <div className={`p-3 rounded-xl border ${subFiltroEtapa === 'INTEGRADO' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-emerald-50 text-emerald-600 border-emerald-100'}`}>
-            <Award size={22} />
+          {/* Quantos foram Integrados */}
+          <div className="space-y-1">
+            <div className="flex justify-between text-xs font-bold text-slate-700">
+              <span>Integrados</span>
+              <span>{metricasAtuais.integrados} pessoas ({pctIntegrados}%)</span>
+            </div>
+            <div className="w-full bg-slate-200 rounded-full h-3.5 overflow-hidden">
+              <div 
+                className="bg-emerald-500 h-3.5 rounded-full print-graph-bar transition-all" 
+                style={{ width: `${Math.max(Number(pctIntegrados), 0)}%` }}
+              ></div>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Painel Avançado de Ferramentas de Filtragem e Busca */}
+      {/* Grid de Cards Dinâmicos */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 print:flex print:flex-col">
+        
+        <div 
+          onClick={() => {
+            setSubFiltroEtapa('TODOS')
+            processarFiltrosEstatisticos(todosRegistros, mesFiltro, 'TODOS', buscaTermo, filtrarSemContato, filtrarEstagnados)
+          }}
+          className={`border rounded-2xl p-5 shadow-xs flex items-center justify-between cursor-pointer transition-all ${
+            subFiltroEtapa === 'TODOS' ? 'bg-indigo-50/50 border-indigo-400 ring-2 ring-indigo-600/10 print-card-active' : 'bg-white border-slate-200 print-card-inactive'
+          }`}
+        >
+          <div>
+            <p className="text-slate-400 text-xxs font-bold uppercase tracking-wider print:text-slate-700 print:text-xs">Total de Contatos Cadastrados</p>
+            <h3 className="text-3xl font-black text-slate-900 mt-1">{metricasAtuais.total}</h3>
+            <p className="text-xxs text-indigo-600 font-bold mt-1 print:hidden">Ver Todos</p>
+          </div>
+          <div className={`p-2.5 rounded-xl border ${subFiltroEtapa === 'TODOS' ? 'bg-indigo-600 text-white' : 'bg-slate-50 text-slate-400'} print:hidden`}>
+            <Users size={18} />
+          </div>
+        </div>
+
+        <div 
+          onClick={() => {
+            setSubFiltroEtapa('VISITANTE')
+            processarFiltrosEstatisticos(todosRegistros, mesFiltro, 'VISITANTE', buscaTermo, filtrarSemContato, filtrarEstagnados)
+          }}
+          className={`border rounded-2xl p-5 shadow-xs flex items-center justify-between cursor-pointer transition-all ${
+            subFiltroEtapa === 'VISITANTE' ? 'bg-blue-50/60 border-blue-400 ring-2 ring-blue-600/10 print-card-active' : 'bg-white border-slate-200 print-card-inactive'
+          }`}
+        >
+          <div>
+            <p className="text-blue-800 text-xxs font-bold uppercase tracking-wider print:text-slate-700 print:text-xs">Visitantes</p>
+            <h3 className="text-3xl font-black text-blue-600 mt-1">{numVisitantesApenasExclusivos}</h3>
+            <p className="text-xxs text-blue-700 font-bold mt-1 print:hidden">Filtrado</p>
+          </div>
+          <div className={`p-2.5 rounded-xl border ${subFiltroEtapa === 'VISITANTE' ? 'bg-blue-600 text-white' : 'bg-slate-50 text-slate-400'} print:hidden`}>
+            <Clock size={18} />
+          </div>
+        </div>
+
+        <div 
+          onClick={() => {
+            setSubFiltroEtapa('CAFE')
+            processarFiltrosEstatisticos(todosRegistros, mesFiltro, 'CAFE', buscaTermo, filtrarSemContato, filtrarEstagnados)
+          }}
+          className={`border rounded-2xl p-5 shadow-xs flex items-center justify-between cursor-pointer transition-all ${
+            subFiltroEtapa === 'CAFE' ? 'bg-amber-50/60 border-amber-400 ring-2 ring-amber-600/10 print-card-active' : 'bg-white border-slate-200 print-card-inactive'
+          }`}
+        >
+          <div>
+            <p className="text-amber-800 text-xxs font-bold uppercase tracking-wider print:text-slate-700 print:text-xs">Café</p>
+            <h3 className="text-3xl font-black text-amber-600 mt-1">{metricasAtuais.cafe}</h3>
+            <p className="text-xxs text-amber-700 font-bold mt-1 print:hidden">Conversão: {metricasAtuais.taxaCafe}</p>
+          </div>
+          <div className={`p-2.5 rounded-xl border ${subFiltroEtapa === 'CAFE' ? 'bg-amber-600 text-white' : 'bg-slate-50 text-slate-400'} print:hidden`}>
+            <Coffee size={18} />
+          </div>
+        </div>
+
+        <div 
+          onClick={() => {
+            setSubFiltroEtapa('INTEGRADO')
+            processarFiltrosEstatisticos(todosRegistros, mesFiltro, 'INTEGRADO', buscaTermo, filtrarSemContato, filtrarEstagnados)
+          }}
+          className={`border rounded-2xl p-5 shadow-xs flex items-center justify-between cursor-pointer transition-all ${
+            subFiltroEtapa === 'INTEGRADO' ? 'bg-emerald-50/60 border-emerald-400 ring-2 ring-emerald-600/10 print-card-active' : 'bg-white border-slate-200 print-card-inactive'
+          }`}
+        >
+          <div>
+            <p className="text-emerald-800 text-xxs font-bold uppercase tracking-wider print:text-slate-700 print:text-xs">Integrados</p>
+            <h3 className="text-3xl font-black text-emerald-600 mt-1">{metricasAtuais.integrados}</h3>
+            <p className="text-xxs text-emerald-700 font-bold mt-1 print:hidden">Eficiência: {metricasAtuais.taxaIgreja}</p>
+          </div>
+          <div className={`p-2.5 rounded-xl border ${subFiltroEtapa === 'INTEGRADO' ? 'bg-emerald-600 text-white' : 'bg-slate-50 text-slate-400'} print:hidden`}>
+            <Award size={18} />
+          </div>
+        </div>
+      </div>
+
+      {/* Painel de Busca Web */}
       <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-4 print:hidden">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex-1 relative">
             <Search className="absolute left-3.5 top-3 text-slate-400" size={16} />
             <input 
               type="text" 
-              placeholder="Buscar por nome ou telefone do visitante..."
+              placeholder="Buscar por nome ou telefone..."
               value={buscaTermo}
               onChange={(e) => {
                 setBuscaTermo(e.target.value)
                 processarFiltrosEstatisticos(todosRegistros, mesFiltro, subFiltroEtapa, e.target.value, filtrarSemContato, filtrarEstagnados)
               }}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 pl-10 pr-4 text-xs font-medium text-slate-800 placeholder-slate-400 focus:bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-all"
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 pl-10 pr-4 text-xs font-medium text-slate-800 placeholder-slate-400 focus:bg-white focus:border-indigo-500 outline-none transition-all"
             />
           </div>
 
@@ -388,13 +505,9 @@ export default function VisaoEstatisticaPastorPage() {
                 setFiltrarSemContato(novoEstado)
                 processarFiltrosEstatisticos(todosRegistros, mesFiltro, subFiltroEtapa, buscaTermo, novoEstado, filtrarEstagnados)
               }}
-              className={`text-xxs font-bold px-3 py-2 rounded-xl border transition-all ${
-                filtrarSemContato 
-                  ? 'bg-amber-50 text-amber-900 border-amber-300 ring-2 ring-amber-500/10' 
-                  : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
-              }`}
+              className={`text-xxs font-bold px-3 py-2 rounded-xl border transition-all ${filtrarSemContato ? 'bg-amber-50 text-amber-900 border-amber-300 ring-2 ring-amber-500/10' : 'bg-white text-slate-600 border-slate-200'}`}
             >
-              ⚠️ SEM CONTATO CELULAR
+              ⚠️ SEM TELEFONE
             </button>
 
             <button
@@ -403,56 +516,49 @@ export default function VisaoEstatisticaPastorPage() {
                 setFiltrarEstagnados(novoEstado)
                 processarFiltrosEstatisticos(todosRegistros, mesFiltro, subFiltroEtapa, buscaTermo, filtrarSemContato, novoEstado)
               }}
-              className={`text-xxs font-bold px-3 py-2 rounded-xl border transition-all ${
-                filtrarEstagnados 
-                  ? 'bg-rose-50 text-rose-900 border-rose-300 ring-2 ring-rose-500/10' 
-                  : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
-              }`}
+              className={`text-xxs font-bold px-3 py-2 rounded-xl border transition-all ${filtrarEstagnados ? 'bg-rose-50 text-rose-900 border-rose-300 ring-2 ring-rose-500/10' : 'bg-white text-slate-600 border-slate-200'}`}
             >
-              🚨 ESTAGNADOS (+14 DIAS)
+              🚨 ESTAGNADOS (+14D)
             </button>
 
             {possuiFiltroAtivo && (
               <button
                 onClick={limparTodosFiltros}
-                className="flex items-center gap-1 bg-slate-900 hover:bg-slate-800 text-white text-xxs font-black px-3 py-2 rounded-xl transition-colors"
+                className="flex items-center gap-1 bg-slate-900 text-white text-xxs font-black px-3 py-2 rounded-xl"
               >
-                <FilterX size={12} /> Limpar Todos os Filtros
+                <FilterX size={12} /> Limpar Filtros
               </button>
             )}
           </div>
         </div>
       </div>
 
-      {/* Tabela de Dados Dinâmica */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4 print:border-none print:shadow-none">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-              <Clock className="text-indigo-600 print:text-black" size={18} />
-              Movimentações Detalhadas ({converterMesNome(mesFiltro)})
-            </h2>
-            <p className="text-xs text-slate-500">
-              Exibindo {pessoasFiltradas.length} registros correspondentes.
-            </p>
-          </div>
+      {/* Listagem Nominativa */}
+      <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4 print:border-none print:shadow-none print:p-0">
+        <div>
+          <h2 className="text-lg font-bold text-slate-900 print:text-base">
+            Listagem Nominativa Setorial
+          </h2>
+          <p className="text-xs text-slate-500">
+            Total listado: {pessoasFiltradas.length} {pessoasFiltradas.length === 1 ? 'pessoa' : 'pessoas'}.
+          </p>
         </div>
 
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="border-b border-slate-100 text-slate-400 text-xxs font-bold uppercase tracking-wider bg-slate-50/70 print:bg-slate-100">
-                <th className="py-3 px-4">Visitante</th>
+              <tr className="border-b border-slate-100 text-slate-400 text-xxs font-bold uppercase tracking-wider bg-slate-50/70">
+                <th className="py-3 px-4">Nome do Visitante</th>
                 <th className="py-3 px-4">Data Ingresso</th>
                 <th className="py-3 px-4 text-center">Etapa Atual</th>
                 <th className="py-3 px-4 text-center">Última Movimentação</th>
-                <th className="py-3 px-4">Status Final / Alertas</th>
+                <th className="py-3 px-4">Status de Consolidação</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-xs font-medium text-slate-700">
               {pessoasFiltradas.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="py-8 text-center text-slate-400 font-normal">Nenhuma pessoa corresponde aos filtros definidos.</td>
+                  <td colSpan={5} className="py-8 text-center text-slate-400 font-normal">Nenhum registro encontrado nesta segmentação.</td>
                 </tr>
               ) : (
                 pessoasFiltradas.map((p) => {
@@ -463,36 +569,26 @@ export default function VisaoEstatisticaPastorPage() {
                     <tr key={p.id} className="hover:bg-slate-50/50 transition-colors">
                       <td className="py-3.5 px-4">
                         <p className="font-bold text-slate-900">{p.nome}</p>
-                        <p className={`text-xxs font-medium ${!p.telefone || p.telefone === 'Sem contato' ? 'text-amber-600 font-bold' : 'text-slate-400'}`}>
-                          {p.telefone || '⚠️ Sem contato cadastrado'}
-                        </p>
+                        <p className="text-xxs text-slate-400">{p.telefone || 'Sem contato'}</p>
                       </td>
                       <td className="py-3.5 px-4 text-slate-500 font-semibold">{formatarData(p.data_inicio)}</td>
                       <td className="py-3.5 px-4 text-center">
-                        <span className={`text-xxs font-black px-2.5 py-1 rounded-md uppercase tracking-wider border ${
-                          p.integrado 
-                            ? 'bg-emerald-50 text-emerald-800 border-emerald-200' 
-                            : p.passouCafe 
-                              ? 'bg-amber-50 text-amber-800 border-amber-200' 
-                              : 'bg-slate-100 text-slate-800 border-slate-200/40'
-                        }`}>
+                        <span className="text-xxs font-bold bg-slate-100 border border-slate-200 px-2.5 py-0.5 rounded text-slate-800">
                           {p.etapa}
                         </span>
                       </td>
                       <td className="py-3.5 px-4 text-center text-slate-500 font-semibold">
                         {formatarData(p.data_ultima_movimentacao)}
                       </td>
-                      <td className="py-3.5 px-4">
+                      <td className="py-3.5 px-4 font-bold">
                         {p.integrado ? (
-                          <span className="text-emerald-600 font-bold flex items-center gap-1"><CheckCircle2 size={14} /> Integrado</span>
+                          <span className="text-emerald-600">● Integrado na Igreja</span>
                         ) : estáEstagnado ? (
-                          <span className="text-rose-600 font-bold flex items-center gap-1.5 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-md text-xxs w-max animate-pulse print:animate-none">
-                            <AlertTriangle size={12} /> Estagnado ({diasEstagnado}d)
-                          </span>
+                          <span className="text-rose-600">⚠️ Estagnado ({diasEstagnado}d)</span>
                         ) : p.passouCafe ? (
-                          <span className="text-amber-600 font-bold flex items-center gap-1"><Coffee size={14} /> No Café</span>
+                          <span className="text-amber-600">● Café</span>
                         ) : (
-                          <span className="text-slate-500 font-bold flex items-center gap-1"><Clock size={14} /> Visitante</span>
+                          <span className="text-slate-500">● Visitante</span>
                         )}
                       </td>
                     </tr>
@@ -504,65 +600,53 @@ export default function VisaoEstatisticaPastorPage() {
         </div>
       </div>
 
-      {/* Histórico Mensal */}
+      {/* Evolução Mensal (Oculto na Impressão) */}
       <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4 print:hidden">
         <div>
           <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
             <TrendingUp className="text-indigo-600" size={18} />
-            Evolução Histórica por Período Mensal
+            Evolução Mensal de Conversão
           </h2>
-          <p className="text-xs text-slate-500">Comparativo rápido de volumetria absoluta e eficiência de conversão entre os meses.</p>
         </div>
 
         <div className="grid grid-cols-1 gap-3">
-          {Object.keys(historicoMeses).length === 0 ? (
-            <p className="text-xs text-slate-400 py-2">Nenhum histórico mensal gerado.</p>
-          ) : (
-            Object.keys(historicoMeses).sort((a, b) => b.localeCompare(a)).map((mes) => {
-              const m = historicoMeses[mes]
-              return (
-                <div 
-                  key={mes}
-                  onClick={() => {
-                    setMesFiltro(mes)
-                    processarFiltrosEstatisticos(todosRegistros, mes, subFiltroEtapa, buscaTermo, filtrarSemContato, filtrarEstagnados)
-                  }}
-                  className={`p-4 border rounded-xl flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 cursor-pointer transition transform active:scale-98 ${
-                    mesFiltro === mes 
-                      ? 'border-indigo-600 bg-indigo-50/20 shadow-xs' 
-                      : 'border-slate-100 bg-white hover:border-slate-200 hover:bg-slate-50/40'
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <div className={`p-2 rounded-xl font-bold text-xs ${mesFiltro === mes ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'}`}>
-                      <Calendar size={16} />
-                    </div>
-                    <div>
-                      <h4 className="font-bold text-sm text-slate-900">{converterMesNome(mes)}</h4>
-                      <p className="text-slate-400 text-xxs font-medium">Clique para abrir detalhes nominativos deste mês</p>
-                    </div>
+          {Object.keys(historicoMeses).sort((a, b) => b.localeCompare(a)).map((mes) => {
+            const m = historicoMeses[mes]
+            return (
+              <div 
+                key={mes}
+                onClick={() => {
+                  setMesFiltro(mes)
+                  processarFiltrosEstatisticos(todosRegistros, mes, subFiltroEtapa, buscaTermo, filtrarSemContato, filtrarEstagnados)
+                }}
+                className={`p-4 border rounded-xl flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 cursor-pointer transition ${mesFiltro === mes ? 'border-indigo-600 bg-indigo-50/10' : 'border-slate-100 bg-white hover:bg-slate-50'}`}
+              >
+                <div className="flex items-center gap-3">
+                  <div className={`p-2 rounded-xl font-bold text-xs ${mesFiltro === mes ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'}`}>
+                    <Calendar size={16} />
                   </div>
+                  <h4 className="font-bold text-sm text-slate-900">{converterMesNome(mes)}</h4>
+                </div>
 
-                  <div className="flex flex-wrap items-center gap-6 text-xs">
-                    <div>
-                      <span className="text-slate-400 font-bold uppercase tracking-wider text-xxs block">Visitou</span>
-                      <span className="font-black text-slate-900 text-base">{m.total}</span>
-                    </div>
-                    <ChevronRight size={14} className="text-slate-300 hidden sm:block" />
-                    <div>
-                      <span className="text-amber-800 font-bold uppercase tracking-wider text-xxs block">No Café</span>
-                      <span className="font-black text-amber-600 text-base">{m.cafe} <span className="text-xxs font-normal text-slate-400">({m.taxaCafe})</span></span>
-                    </div>
-                    <ChevronRight size={14} className="text-slate-300 hidden sm:block" />
-                    <div>
-                      <span className="text-emerald-800 font-bold uppercase tracking-wider text-xxs block">Membros</span>
-                      <span className="font-black text-emerald-600 text-base">{m.integrados} <span className="text-xxs font-normal text-slate-400">({m.taxaIgreja})</span></span>
-                    </div>
+                <div className="flex flex-wrap items-center gap-6 text-xs font-semibold">
+                  <div>
+                    <span className="text-slate-400 text-xxs block uppercase">Visitou</span>
+                    <span className="text-slate-900 text-base font-black">{m.total}</span>
+                  </div>
+                  <ChevronRight size={14} className="text-slate-300 hidden sm:block" />
+                  <div>
+                    <span className="text-amber-800 text-xxs block uppercase">No Café</span>
+                    <span className="text-amber-600 text-base font-black">{m.cafe} ({m.taxaCafe})</span>
+                  </div>
+                  <ChevronRight size={14} className="text-slate-300 hidden sm:block" />
+                  <div>
+                    <span className="text-emerald-800 text-xxs block uppercase">Membros</span>
+                    <span className="text-emerald-600 text-base font-black">{m.integrados} ({m.taxaIgreja})</span>
                   </div>
                 </div>
-              )
-            })
-          )}
+              </div>
+            )
+          })}
         </div>
       </div>
 
