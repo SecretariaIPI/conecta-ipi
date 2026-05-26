@@ -51,7 +51,7 @@ export default function DashboardPage() {
           </div>
         </Link>
 
-        {/* Card 2: Dashboard Pastoral */}
+        {/* Card 2: Dashboard Acompanhamento */}
         <Link
           href="/dashboard/pastor/acompanhamento"
           className="group relative bg-gradient-to-br from-blue-600 to-indigo-700 text-white rounded-2xl p-6 shadow-md shadow-blue-700/10 flex flex-col justify-between overflow-hidden transition duration-200 active:scale-[0.99]"
@@ -71,11 +71,11 @@ export default function DashboardPage() {
 
           <div className="mt-12 z-10 space-y-1.5">
             <h2 className="text-2xl font-black tracking-tight flex items-center gap-1.5">
-              Dashboard Pastoral
+              Dashboard de Acompanhamento
               <ChevronRight size={18} className="transform group-hover:translate-x-1 transition" />
             </h2>
             <p className="text-blue-100/90 text-xs font-medium leading-relaxed max-w-sm">
-              Análise de KPIs, relatórios de follow-up e métricas de engajamento ministerial.
+              Métricas detalhadas e controle de engajamento ministerial de visitantes.
             </p>
           </div>
         </Link>
