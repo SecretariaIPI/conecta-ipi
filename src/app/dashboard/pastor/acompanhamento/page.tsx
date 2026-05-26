@@ -109,9 +109,6 @@ export default function AcompanhamentoPage() {
             </div>
 
             <div className="flex gap-2">
-              <Link href="/dashboard/pastor" className="bg-purple-600 text-white hover:bg-purple-700 px-4 py-2.5 rounded-xl text-xs font-extrabold flex items-center gap-2 shadow-sm">
-                <BarChart3 size={15} /> Ver Gráficos Analíticos
-              </Link>
               <button onClick={() => setMostrarRelatorio(true)} className="bg-blue-600 text-white hover:bg-blue-700 px-4 py-2.5 rounded-xl text-xs font-extrabold flex items-center gap-2 shadow-sm">
                 <FileText size={15} /> Gerar Relatório
               </button>
