@@ -1,343 +1,272 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { createClient } from '@supabase/supabase-js'
-import {
-  MessageSquare,
-  Send,
-  CheckCircle2,
-  Loader2,
-  Users,
-  Coffee,
-  Calendar,
-  PlayCircle,
-  PauseCircle,
-  Check
+import { 
+  MessageSquare, Coffee, Users, Send, 
+  ArrowLeft, Loader2, Link2, Copy, Check
 } from 'lucide-react'
 
 const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
 )
 
-type Visitante = {
+interface VisitanteCafe {
   id: string
   nome: string
   telefone: string | null
-  sexo: string | null
-  cidade: string | null
-  data_visita: string | null
-  created_at: string | null
-  convite_cafe_enviado: boolean | null
-  confirmou_cafe: boolean | null
+  statusFollowup: string
 }
 
-const mensagemPadrao = `Olá [nome], graça e paz! 🙏💙
-
-Ficamos muito felizes com seu retorno e queremos te convidar para nosso Café de Integração ☕
-
-Será um momento especial para conhecermos você melhor, apresentarmos a visão da IPI Cascavel e compartilharmos comunhão.
-
-📍 Salão Social da igreja
-🕔 17h
-
-Será uma alegria receber você 💙`
-
-function normalizar(texto: string | null) {
-  return (texto || '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toUpperCase()
-    .trim()
-}
-
+// O nome da função agora bate exatamente com a convenção da rota do Next.js
 export default function CafeConvitesPage() {
-  const [visitantes, setVisitantes] = useState<Visitante[]>([])
-  const [loading, setLoading] = useState(false)
-  const [mensagem, setMensagem] = useState(mensagemPadrao)
-  const [enviados, setEnviados] = useState<string[]>([])
-  const [disparandoBloco, setDisparandoBloco] = useState(false)
-  const [indiceAtual, setIndiceAtual] = useState(0)
-  const [totalDisparo, setTotalDisparo] = useState(0)
-
-  const cancelarDisparoRef = useRef(false)
+  const [loading, setLoading] = useState(true)
+  const [visitantes, setVisitantes] = useState<VisitanteCafe[]>([])
+  const [selecionados, setSelecionados] = useState<string[]>([])
+  const [linkGrupo, setLinkGrupo] = useState('')
+  const [copiado, setCopiado] = useState(false)
+  
+  const [mensagemModelo, setMensagemModelo] = useState(
+    `Olá, {nome}! Tudo bem?\n\nPassando para lembrar do nosso próximo *Café com o Pastor*. Estamos muito animados com o que Deus vai fazer! 🙌\n\nCriamos um grupo exclusivo no WhatsApp com todos os confirmados para alinhar os detalhes de horários e local. Entre pelo link abaixo:\n{link}`
+  )
 
   useEffect(() => {
-    carregarVisitantes()
+    carregarVisitantesCafe()
   }, [])
 
-  async function carregarVisitantes() {
-    setLoading(true)
+  async function carregarVisitantesCafe() {
+    try {
+      setLoading(true)
 
-    const { data: followups, error: followupError } = await supabase
-      .from('visitantes_followup')
-      .select('visitante_id, status')
-      .eq('status', 'positivo')
+      const { data: followups, error: fError } = await supabase
+        .from('visitantes_followup')
+        .select('visitante_id, status')
+        .eq('status', 'confirmado')
 
-    if (followupError) {
-      alert('Erro ao carregar follow-up: ' + followupError.message)
-      setLoading(false)
-      return
-    }
-
-    const idsPositivos = (followups || []).map((f) => f.visitante_id)
-
-    if (idsPositivos.length === 0) {
-      setVisitantes([])
-      setLoading(false)
-      return
-    }
-
-    const dataLimite = new Date()
-    dataLimite.setDate(dataLimite.getDate() - 30)
-
-    const { data, error } = await supabase
-      .from('visitantes')
-      .select('*')
-      .in('id', idsPositivos)
-      .gte('created_at', dataLimite.toISOString())
-      .eq('convite_cafe_enviado', false)
-
-    if (error) {
-      alert('Erro ao carregar visitantes: ' + error.message)
-      setLoading(false)
-      return
-    }
-
-    const filtrados = (data || []).filter((v) => v.telefone)
-
-    setVisitantes(filtrados)
-    setLoading(false)
-  }
-
-  const visitantesPositivos = visitantes.length
-
-  const visitantesUltimoMes = useMemo(() => {
-    return visitantes.filter((v) => {
-      if (!v.created_at) return false
-      const data = new Date(v.created_at)
-      const limite = new Date()
-      limite.setDate(limite.getDate() - 30)
-      return data >= limite
-    }).length
-  }, [visitantes])
-
-  const pendentes = visitantes.filter((v) => !v.convite_cafe_enviado).length
-  const confirmados = visitantes.filter((v) => v.confirmou_cafe).length
-
-  function gerarLinkWhatsapp(visitante: Visitante) {
-    if (!visitante.telefone || !mensagem.trim()) return null
-
-    const telefone = visitante.telefone.replace(/\D/g, '')
-    const primeiroNome = visitante.nome.split(' ')[0]
-    const msg = mensagem.replace(/\[nome\]/g, primeiroNome)
-
-    return `https://wa.me/55${telefone}?text=${encodeURIComponent(msg)}`
-  }
-
-  async function marcarEnviado(id: string) {
-    await supabase
-      .from('visitantes')
-      .update({
-        convite_cafe_enviado: true,
-        data_convite_cafe: new Date().toISOString()
-      })
-      .eq('id', id)
-  }
-
-  async function marcarConfirmado(id: string) {
-    await supabase
-      .from('visitantes')
-      .update({
-        confirmou_cafe: true
-      })
-      .eq('id', id)
-
-    carregarVisitantes()
-  }
-
-  async function dispararMensagem(visitante: Visitante) {
-    const url = gerarLinkWhatsapp(visitante)
-    if (!url) return
-
-    window.open(url, '_blank')
-
-    await marcarEnviado(visitante.id)
-
-    if (!enviados.includes(visitante.id)) {
-      setEnviados((prev) => [...prev, visitante.id])
-    }
-
-    carregarVisitantes()
-  }
-
-  async function dispararEmBloco() {
-    if (visitantes.length === 0) return
-
-    cancelarDisparoRef.current = false
-    setDisparandoBloco(true)
-    setIndiceAtual(0)
-    setTotalDisparo(visitantes.length)
-
-    for (let i = 0; i < visitantes.length; i++) {
-      if (cancelarDisparoRef.current) break
-
-      const visitante = visitantes[i]
-      const url = gerarLinkWhatsapp(visitante)
-
-      if (url) {
-        window.open(url, '_blank')
-        await marcarEnviado(visitante.id)
-
-        setEnviados((prev) => {
-          if (prev.includes(visitante.id)) return prev
-          return [...prev, visitante.id]
-        })
+      if (fError || !followups || followups.length === 0) {
+        setVisitantes([])
+        setLoading(false)
+        return
       }
 
-      setIndiceAtual(i + 1)
+      const idsConfirmados = followups.map(f => f.visitante_id)
 
-      await new Promise((resolve) => setTimeout(resolve, 1500))
+      const { data: dadosVisitantes, error: vError } = await supabase
+        .from('visitantes')
+        .select('id, nome, telefone')
+        .in('id', idsConfirmados)
+
+      if (vError || !dadosVisitantes) {
+        setVisitantes([])
+        setLoading(false)
+        return
+      }
+
+      const listaPronta: VisitanteCafe[] = dadosVisitantes.map((v) => ({
+        id: v.id,
+        nome: v.nome || 'Não identificado',
+        telefone: v.telefone || null,
+        statusFollowup: 'confirmado'
+      }))
+
+      setVisitantes(listaPronta)
+      setSelecionados(listaPronta.filter(v => v.telefone && v.telefone.trim() !== '').map(v => v.id))
+
+    } catch (err) {
+      console.error('Erro ao mapear lista de convites do café:', err)
+    } finally {
+      setLoading(false)
     }
-
-    setDisparandoBloco(false)
-    setIndiceAtual(0)
-    setTotalDisparo(0)
-
-    carregarVisitantes()
   }
 
-  function cancelarDisparo() {
-    cancelarDisparoRef.current = true
-    setDisparandoBloco(false)
+  const alternarSelecao = (id: string) => {
+    setSelecionados(prev => 
+      prev.includes(id) ? prev.filter(sid => sid !== id) : [...prev, id]
+    )
+  }
+
+  const alternarTodos = () => {
+    if (selecionados.length === visitantes.length) {
+      setSelecionados([])
+    } else {
+      setSelecionados(visitantes.filter(v => v.telefone).map(v => v.id))
+    }
+  }
+
+  function limparTelefone(telefone: string | null): string {
+    if (!telefone) return ''
+    let limpo = telefone.replace(/\D/g, '')
+    if (limpo.length === 11 && limpo.startsWith('0')) limpo = limpo.substring(1)
+    if (!limpo.startsWith('55') && limpo.length >= 10) limpo = '55' + limpo
+    return limpo
+  }
+
+  function enviarMensagemWhatsApp(visitante: VisitanteCafe) {
+    const foneLimpo = limparTelefone(visitante.telefone)
+    if (!foneLimpo) return
+
+    let textoFinal = mensagemModelo
+      .replace('{nome}', visitante.nome.split(' ')[0])
+      .replace('{link}', linkGrupo || '[LINK DO GRUPO]')
+
+    const textoCodificado = encodeURIComponent(textoFinal)
+    window.open(`https://wa.me/${foneLimpo}?text=${textoCodificado}`, '_blank')
+  }
+
+  const copiarTextoModelo = () => {
+    navigator.clipboard.writeText(mensagemModelo)
+    setCopiado(true)
+    setTimeout(() => setCopiado(false), 2000)
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-[60vh] flex flex-col items-center justify-center gap-2 text-slate-400">
+        <Loader2 className="animate-spin text-amber-500" size={32} />
+        <span className="text-xs font-bold tracking-wider uppercase">Sincronizando confirmados do Café...</span>
+      </div>
+    )
   }
 
   return (
-    <div className="max-w-7xl mx-auto space-y-8 p-4 sm:p-6 lg:p-8 bg-slate-50/50 min-h-screen">
-      <div className="border-b border-slate-200 pb-5">
-        <h1 className="text-3xl font-black text-slate-900 flex items-center gap-3 tracking-tight">
-          <div className="bg-amber-500 p-2 rounded-2xl text-white shadow-sm">
-            <Coffee size={24} />
-          </div>
-          Convites Café Integração
-        </h1>
-
-        <p className="text-slate-500 mt-2 text-sm font-medium">
-          Visitantes com retorno positivo prontos para convite
-        </p>
+    <div className="max-w-5xl mx-auto space-y-6 p-4 sm:p-6 lg:p-8">
+      
+      <div>
+        <Link href="/dashboard/acompanhamento" className="inline-flex items-center gap-2 text-xs font-bold text-slate-500 hover:text-amber-600 transition-colors">
+          <ArrowLeft size={14} /> Voltar ao Acompanhamento
+        </Link>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <div className="bg-white rounded-2xl p-5 shadow-sm border">
-          <Users className="text-blue-600 mb-2" />
-          <div className="text-sm text-slate-500">Visitantes positivos</div>
-          <div className="text-3xl font-black">{visitantesPositivos}</div>
-        </div>
-
-        <div className="bg-white rounded-2xl p-5 shadow-sm border">
-          <Calendar className="text-purple-600 mb-2" />
-          <div className="text-sm text-slate-500">Últimos 30 dias</div>
-          <div className="text-3xl font-black">{visitantesUltimoMes}</div>
-        </div>
-
-        <div className="bg-white rounded-2xl p-5 shadow-sm border">
-          <MessageSquare className="text-amber-600 mb-2" />
-          <div className="text-sm text-slate-500">Pendentes convite</div>
-          <div className="text-3xl font-black">{pendentes}</div>
-        </div>
-
-        <div className="bg-white rounded-2xl p-5 shadow-sm border">
-          <Check className="text-emerald-600 mb-2" />
-          <div className="text-sm text-slate-500">Confirmados</div>
-          <div className="text-3xl font-black">{confirmados}</div>
+      <div className="border-b border-slate-200 pb-5 md:flex md:items-center md:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-black text-slate-900 flex items-center gap-3 tracking-tight">
+            <div className="bg-amber-500 p-2 rounded-2xl text-white shadow-sm">
+              <Coffee size={22} />
+            </div>
+            Convite: Grupo do Café com o Pastor
+          </h1>
+          <p className="text-slate-500 text-sm mt-1">
+            Lista baseada em tempo real nos visitantes com status <span className="font-bold text-amber-600 uppercase">"Confirmado Café"</span>.
+          </p>
         </div>
       </div>
 
-      <div className="bg-white rounded-2xl p-6 shadow-sm border space-y-6">
-        <textarea
-          value={mensagem}
-          onChange={(e) => setMensagem(e.target.value)}
-          rows={8}
-          disabled={disparandoBloco}
-          className="w-full border border-slate-200 rounded-xl p-4 outline-none"
-        />
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        {/* Configurações */}
+        <div className="space-y-4 lg:col-span-1">
+          <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4 shadow-sm">
+            <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider flex items-center gap-2">
+              <Link2 size={16} className="text-amber-500" /> 1. Link do Grupo
+            </h3>
+            <div>
+              <label className="text-xxs font-black text-slate-400 uppercase">URL do Grupo do WhatsApp</label>
+              <input 
+                type="text" 
+                placeholder="https://chat.whatsapp.com/..." 
+                value={linkGrupo}
+                onChange={(e) => setLinkGrupo(e.target.value)}
+                className="w-full mt-1 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium text-slate-800 focus:bg-white focus:border-amber-500 outline-none transition-all"
+              />
+            </div>
+          </div>
 
-        <div className="flex gap-3">
-          {!disparandoBloco ? (
-            <button
-              onClick={dispararEmBloco}
-              className="px-5 py-3 rounded-xl bg-blue-600 text-white font-bold flex items-center gap-2"
-            >
-              <PlayCircle size={18} />
-              Convidar todos pendentes
-            </button>
-          ) : (
-            <button
-              onClick={cancelarDisparo}
-              className="px-5 py-3 rounded-xl bg-red-600 text-white font-bold flex items-center gap-2"
-            >
-              <PauseCircle size={18} />
-              Pausar disparo
-            </button>
-          )}
+          <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4 shadow-sm">
+            <div className="flex justify-between items-center">
+              <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider flex items-center gap-2">
+                <MessageSquare size={16} className="text-amber-500" /> 2. Texto do Convite
+              </h3>
+              <button onClick={copiarTextoModelo} className="text-slate-400 hover:text-slate-600 p-1 rounded-md transition">
+                {copiado ? <Check size={14} className="text-emerald-600" /> : <Copy size={14} />}
+              </button>
+            </div>
+            
+            <div className="space-y-1">
+              <label className="text-xxs font-black text-slate-400 uppercase">Mensagem Base</label>
+              <textarea 
+                rows={8}
+                value={mensagemModelo}
+                onChange={(e) => setMensagemModelo(e.target.value)}
+                className="w-full mt-1 bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs font-medium text-slate-800 focus:bg-white focus:border-amber-500 outline-none transition-all"
+              />
+            </div>
+          </div>
         </div>
 
-        {disparandoBloco && (
-          <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
-            <div
-              className="bg-blue-600 h-2 rounded-full transition-all"
-              style={{
-                width: `${(indiceAtual / totalDisparo) * 100}%`
-              }}
-            />
-          </div>
-        )}
-
-        {loading ? (
-          <div className="py-20 flex justify-center">
-            <Loader2 className="animate-spin" />
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {visitantes.map((visitante) => (
-              <div
-                key={visitante.id}
-                className="border rounded-2xl p-4 flex justify-between items-center"
-              >
-                <div>
-                  <div className="font-bold">{visitante.nome}</div>
-                  <div className="text-sm text-slate-500">
-                    {visitante.telefone}
-                  </div>
-                </div>
-
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => marcarConfirmado(visitante.id)}
-                    className="px-4 py-2 rounded-xl bg-emerald-100 text-emerald-700 font-semibold"
-                  >
-                    Confirmou
-                  </button>
-
-                  <button
-                    onClick={() => dispararMensagem(visitante)}
-                    className="px-4 py-2 rounded-xl bg-blue-600 text-white font-semibold flex items-center gap-2"
-                  >
-                    <Send size={14} />
-                    Enviar
-                  </button>
-                </div>
+        {/* Listagem */}
+        <div className="lg:col-span-2">
+          <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+            <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+              <div className="flex items-center gap-2">
+                <Users size={16} className="text-slate-400" />
+                <h2 className="font-bold text-sm text-slate-800">Confirmados no Café ({visitantes.length})</h2>
               </div>
-            ))}
+              
+              {visitantes.length > 0 && (
+                <button onClick={alternarTodos} className="text-xxs font-black text-amber-600 hover:underline uppercase">
+                  {selecionados.length === visitantes.length ? 'Desmarcar Todos' : 'Selecionar Todos'}
+                </button>
+              )}
+            </div>
 
-            {visitantes.length === 0 && (
-              <div className="text-center py-16 text-slate-400">
-                Nenhum visitante elegível para convite.
+            <div className="divide-y divide-slate-100 max-h-[500px] overflow-y-auto">
+              {visitantes.length === 0 ? (
+                <div className="p-8 text-center text-slate-400 text-xs font-medium space-y-2">
+                  <p>Nenhuma pessoa com status "Confirmado Café" no momento.</p>
+                  <p className="text-xxs text-slate-400 font-normal">Mude o status de um visitante para "Confirmado Café" na listagem para ele aparecer aqui.</p>
+                </div>
+              ) : (
+                visitantes.map((v) => {
+                  const foneValido = v.telefone && v.telefone.trim() !== ''
+                  const estaSelecionado = selecionados.includes(v.id)
+
+                  return (
+                    <div key={v.id} className={`p-4 flex items-center justify-between gap-4 transition-colors ${estaSelecionado ? 'bg-amber-50/10' : 'hover:bg-slate-50/50'}`}>
+                      <div className="flex items-center gap-3">
+                        <input 
+                          type="checkbox" 
+                          disabled={!foneValido}
+                          checked={estaSelecionado}
+                          onChange={() => alternarSelecao(v.id)}
+                          className="w-4 h-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500 disabled:opacity-40 cursor-pointer"
+                        />
+                        <div>
+                          <p className="text-xs font-bold text-slate-900">{v.nome}</p>
+                          <p className="text-xxs text-slate-400">{v.telefone || 'Sem número cadastrado'}</p>
+                        </div>
+                      </div>
+
+                      <div>
+                        {foneValido ? (
+                          <button
+                            onClick={() => enviarMensagemWhatsApp(v)}
+                            className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xxs px-3 py-1.5 rounded-lg shadow-2xs transition-colors"
+                          >
+                            <Send size={11} /> Enviar Convite
+                          </button>
+                        ) : (
+                          <span className="text-xxs text-rose-500 font-medium bg-rose-50 px-2 py-1 rounded">Sem Fone</span>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })
+              )}
+            </div>
+
+            {visitantes.length > 0 && (
+              <div className="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-xxs font-bold text-slate-500">
+                <span>{selecionados.length} selecionados</span>
+                <p className="text-slate-400 font-normal">Disparos manuais via wa.me</p>
               </div>
             )}
           </div>
-        )}
+        </div>
+
       </div>
+
     </div>
   )
 }

@@ -108,8 +108,19 @@ export default function AcompanhamentoPage() {
               </p>
             </div>
 
+            {/* Ações da Dashboard */}
             <div className="flex gap-2">
-              <button onClick={() => setMostrarRelatorio(true)} className="bg-blue-600 text-white hover:bg-blue-700 px-4 py-2.5 rounded-xl text-xs font-extrabold flex items-center gap-2 shadow-sm">
+              <Link 
+                href="/dashboard/cafe-convites" 
+                className="bg-amber-500 hover:bg-amber-600 text-white px-4 py-2.5 rounded-xl text-xs font-extrabold flex items-center gap-2 shadow-sm transition"
+              >
+                <Coffee size={15} /> Convites do Café
+              </Link>
+              
+              <button 
+                onClick={() => setMostrarRelatorio(true)} 
+                className="bg-blue-600 text-white hover:bg-blue-700 px-4 py-2.5 rounded-xl text-xs font-extrabold flex items-center gap-2 shadow-sm transition"
+              >
                 <FileText size={15} /> Gerar Relatório
               </button>
             </div>
