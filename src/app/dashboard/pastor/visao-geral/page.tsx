@@ -6,7 +6,7 @@ import { createClient } from '@supabase/supabase-js'
 import { 
   BarChart3, Loader2, AlertTriangle, Users, 
   TrendingUp, Footprints, Clock, ShieldAlert, 
-  ArrowLeft, Printer, Coffee, HelpCircle, Eye
+  ArrowLeft, Printer, Coffee, HelpCircle, Eye, Church
 } from 'lucide-react'
 
 const supabase = createClient(
@@ -16,8 +16,8 @@ const supabase = createClient(
 
 interface MetricasTrilho {
   totalNoTrilho: number
-  faseVisitante: number // Pessoas cadastradas em visitantes mas que ainda não entraram no trilho
-  faseCafe: number      // Pessoas na primeira coluna (Sala de Novos / Recém-chegados do café)
+  faseVisitante: number 
+  faseCafe: number      
   batismoRecebimento: number
   fase2Engajamento: number
   fase3Ministerio: number
@@ -26,11 +26,18 @@ interface MetricasTrilho {
   semMinisterio: number
 }
 
+interface DenominacaoRanking {
+  nome: string
+  qtd: number
+}
+
 export default function VisaoGeralPastorPage() {
   const [loading, setLoading] = useState(true)
   const [erro, setErro] = useState<string | null>(null)
   const [totalVisitantes, setTotalVisitantes] = useState(0)
   const [filtroRelatorio, setFiltroRelatorio] = useState<'geral' | 'criticos' | 'consolidacao'>('geral')
+  const [estatisticasOrigem, setEstatisticasOrigem] = useState<{ [key: string]: number }>({})
+  const [rankingIgrejas, setRankingIgrejas] = useState<DenominacaoRanking[]>([])
   const [metricas, setMetricas] = useState<MetricasTrilho>({
     totalNoTrilho: 0,
     faseVisitante: 0,
@@ -49,14 +56,51 @@ export default function VisaoGeralPastorPage() {
         setLoading(true)
         setErro(null)
 
-        // 1. Busca contagem geral de visitantes cadastrados
-        const { count: countVisitantes, error: errV } = await supabase
+        // 1. Busca dados gerais de visitantes para calcular contagem e origens religiosas
+        const { data: visitantesData, error: errV } = await supabase
           .from('visitantes')
-          .select('*', { count: 'exact', head: true })
+          .select('id, origem')
         
         if (errV) throw errV
-        const totalVis = countVisitantes || 0
+        
+        const totalVis = visitantesData?.length || 0
         setTotalVisitantes(totalVis)
+
+        if (visitantesData) {
+          const mapaIgrejasEspecificas: { [key: string]: number } = {}
+
+          const mapaOrigens = visitantesData.reduce((acc: { [key: string]: number }, v) => {
+            let chave = v.origem || 'Não informou'
+            
+            // Tratamento e extração do nome da Igreja digitado entre parênteses
+            if (chave.startsWith('Igreja Evangélica')) {
+              acc['Igreja Evangélica'] = (acc['Igreja Evangélica'] || 0) + 1
+              
+              // Expressão regular para capturar o que está dentro de (...)
+              const extrairNome = chave.match(/\(([^)]+)\)/)
+              if (extrairNome && extrairNome[1]) {
+                const nomeIgreja = extrairNome[1].trim()
+                // Normaliza para evitar duplicados por caixa alta/baixa (Ex: Batista vs batista)
+                const nomeFormatado = nomeIgreja.charAt(0).toUpperCase() + nomeIgreja.slice(1).toLowerCase()
+                mapaIgrejasEspecificas[nomeFormatado] = (mapaIgrejasEspecificas[nomeFormatado] || 0) + 1
+              } else {
+                mapaIgrejasEspecificas['Outras Evangélicas (Não especificada)'] = (mapaIgrejasEspecificas['Outras Evangélicas (Não especificada)'] || 0) + 1
+              }
+            } else {
+              acc[chave] = (acc[chave] || 0) + 1
+            }
+            return acc
+          }, {})
+
+          setEstatisticasOrigem(mapaOrigens)
+
+          // Transforma o mapa de igrejas específicas em um array ordenado (Ranking)
+          const rankingOrdenado = Object.keys(mapaIgrejasEspecificas)
+            .map(nome => ({ nome, qtd: mapaIgrejasEspecificas[nome] }))
+            .sort((a, b) => b.qtd - a.qtd)
+
+          setRankingIgrejas(rankingOrdenado)
+        }
 
         // 2. Busca dados do Trilho de Crescimento
         const { data: trilhoData, error: errT } = await supabase
@@ -68,7 +112,7 @@ export default function VisaoGeralPastorPage() {
         if (trilhoData) {
           const hoje = new Date()
           
-          let salaNovos = 0 // Correspondente à fase Café
+          let salaNovos = 0 
           let batismo = 0
           let engajamento = 0
           let ministerio = 0
@@ -84,7 +128,6 @@ export default function VisaoGeralPastorPage() {
             if (item.etapa_atual === 'FASE_3_MINISTERIO' && !item.ministerio_ativo) sMin++
             if (item.etapa_atual === 'FASE_3_MINISTERIO') ministerio++
 
-            // Cálculo de retenção crítica (>= 21 dias sem alteração)
             const ultimaInteracao = new Date(item.ultima_interacao)
             const diasParado = Math.floor((hoje.getTime() - ultimaInteracao.getTime()) / (1000 * 60 * 60 * 24))
             if (diasParado >= 21) {
@@ -92,7 +135,6 @@ export default function VisaoGeralPastorPage() {
             }
           })
 
-          // Fase Visitante Pura = Total cadastrados menos os que já estão trilhando alguma etapa
           const visitantesPuros = totalVis - trilhoData.length
 
           setMetricas({
@@ -168,7 +210,7 @@ export default function VisaoGeralPastorPage() {
         </div>
       )}
 
-      {/* Cabeçalho do Relatório (Ajustado para o Conselho) */}
+      {/* Cabeçalho do Relatório */}
       <div className="border-b border-slate-200 pb-5 flex justify-between items-end print:border-b-2 print:border-slate-900">
         <div>
           <span className="hidden print:block text-xxs uppercase tracking-widest font-black text-slate-400 mb-1">Relatório Executivo Oficial</span>
@@ -186,7 +228,7 @@ export default function VisaoGeralPastorPage() {
         </div>
       </div>
 
-      {/* Controladores de Filtros para a Impressão */}
+      {/* Controladores de Filtros */}
       <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 print:hidden">
         <div className="space-y-0.5">
           <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
@@ -216,13 +258,73 @@ export default function VisaoGeralPastorPage() {
         </div>
       </div>
 
-      {/* RENDERIZAÇÃO CONDICIONAL BASEADA NOS FILTROS (VÁLIDO PARA TELA E IMPRESSÃO) */}
-      
+      {/* PAINEL DINÂMICO DE ORIGEM RELIGIOSA + RANKING DE DENOMINAÇÕES */}
+      {filtroRelatorio === 'geral' && (
+        <div className="space-y-6 animate-fadeIn">
+          <div className="bg-white rounded-3xl border border-slate-200/80 shadow-sm p-6 space-y-6 w-full print:border-slate-300">
+            <div className="flex items-center gap-2">
+              <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl print:hidden">
+                <Users size={18} />
+              </div>
+              <div>
+                <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider">Origem Religiosa dos Visitantes</h3>
+                <p className="text-xxs font-medium text-slate-400">Raio-X de mapeamento evangelístico e background dos novos contatos.</p>
+              </div>
+            </div>
+
+            {/* Macro Gráficos das Origens */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {['Igreja Católica', 'Igreja Evangélica', 'Não pertence a nenhuma igreja', 'Não informou'].map((opcao) => {
+  const qtd = estatisticasOrigem[opcao] || 0
+  const porcentagem = totalVisitantes > 0 ? Math.round((qtd / totalVisitantes) * 100) : 0 ? Math.round((qtd / totalVisitantes) * 100) : 0
+                return (
+                  <div key={opcao} className="bg-slate-50 border border-slate-100 p-4 rounded-2xl flex flex-col justify-between space-y-3 print:bg-white print:border-slate-300">
+                    <div className="flex justify-between items-start gap-2">
+                      <span className="text-xs font-bold text-slate-600 tracking-tight leading-snug">{opcao}</span>
+                      <span className="text-base font-black text-slate-900 whitespace-nowrap">
+                        {qtd} <span className="text-xxs text-slate-400 font-bold">({porcentagem}%)</span>
+                      </span>
+                    </div>
+                    <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
+                      <div className="bg-indigo-600 h-full rounded-full" style={{ width: `${porcentagem}%` }}></div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Levantamento Analítico das Comunidades Evangélicas de Origem */}
+            {rankingIgrejas.length > 0 && (
+              <div className="border-t border-slate-100 pt-5 space-y-3 print:border-slate-300">
+                <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                  <Church size={14} className="text-slate-500" /> Detalhamento de Denominações Evangélicas Anteriores
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                  {rankingIgrejas.map((igreja, idx) => {
+                    const totalEvangelicos = estatisticasOrigem['Igreja Evangélica'] || 1
+                    const percentualDoSegmento = Math.round((igreja.qtd / totalEvangelicos) * 100)
+                    return (
+                      <div key={idx} className="bg-slate-50/60 border border-slate-200/60 px-4 py-2.5 rounded-xl flex justify-between items-center text-xs font-medium text-slate-700 print:bg-white print:border-slate-300">
+                        <span className="truncate max-w-[180px] font-bold text-slate-800">
+                          {idx + 1}. {igreja.nome}
+                        </span>
+                        <span className="bg-indigo-50 border border-indigo-100 text-indigo-700 text-xxs font-black px-2 py-0.5 rounded-md whitespace-nowrap">
+                          {igreja.qtd} {igreja.qtd === 1 ? 'pessoa' : 'pessoas'} ({percentualDoSegmento}%)
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* RENDERIZAÇÃO CONDICIONAL DOS FILTROS ORIGINAIS */}
       {filtroRelatorio === 'geral' && (
         <div className="space-y-6">
-          {/* Grid de Cartões Principais (Fase Visitante e Fase Café Inclusas) */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            
             <div className="bg-white border border-slate-200 p-4 rounded-xl print:border-slate-300">
               <div className="flex items-center justify-between">
                 <span className="text-xxs font-black text-slate-400 uppercase tracking-wider">1. Fase Visitante</span>
@@ -258,10 +360,8 @@ export default function VisaoGeralPastorPage() {
               <h3 className={`text-2xl font-black mt-1 tracking-tight ${metricas.totalRetidos > 0 ? 'text-rose-600' : 'text-slate-900'}`}>{metricas.totalRetidos}</h3>
               <p className="text-xxs text-slate-400 mt-1">Estagnados há +21 dias</p>
             </div>
-
           </div>
 
-          {/* Gráfico Analítico de Barras para o Conselho */}
           <div className="bg-white border border-slate-200 rounded-xl p-5 print:border-slate-300">
             <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider mb-4">Distribuição Demográfica do Rebanho</h3>
             <div className="space-y-4">
@@ -363,7 +463,7 @@ export default function VisaoGeralPastorPage() {
         </div>
       )}
 
-      {/* Assinatura de Validação - Visível apenas na folha impressa */}
+      {/* Assinatura de Validação */}
       <div className="hidden print:flex justify-between items-center pt-16 text-xxs font-bold text-slate-400 border-t border-dashed border-slate-300 mt-12">
         <div>
           <p className="border-t border-slate-400 w-48 text-center pt-1 text-slate-700">Assinatura do Pastor Titular</p>
