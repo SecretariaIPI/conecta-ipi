@@ -5,8 +5,8 @@ import Link from 'next/link'
 import { createClient } from '@supabase/supabase-js'
 import {
   Users, Clock, Heart, Coffee, CheckCircle2, Archive,
-  AlertTriangle, X, Loader2, TrendingUp, ChevronDown,
-  FileText, ArrowLeft, BarChart3
+  AlertTriangle, X, Loader2, ChevronDown, FileText, 
+  ArrowLeft, BarChart3
 } from 'lucide-react'
 
 const supabase = createClient(
@@ -81,16 +81,23 @@ export default function AcompanhamentoPage() {
   const arquivados = followups.filter((f) => f.status === 'arquivado').length
   const semContato = followups.filter((f) => !f.data_contato).length
 
-  if (loading) return <div className="p-8 text-center text-sm font-semibold text-slate-400">Carregando acompanhamento...</div>
+  if (loading) {
+    return (
+      <div className="min-h-[60vh] flex flex-col items-center justify-center gap-2 text-slate-400">
+        <Loader2 className="animate-spin text-blue-600" size={32} />
+        <span className="text-xs font-bold tracking-wider uppercase">Carregando Acompanhamento...</span>
+      </div>
+    )
+  }
 
   return (
     <>
       <div className={mostrarRelatorio ? 'print:hidden' : ''}>
-        <div className="max-w-7xl mx-auto space-y-6 p-4">
+        <div className="max-w-7xl mx-auto space-y-6 p-4 sm:p-6 lg:p-8">
           
           {/* Botão de Voltar para a Dashboard Principal */}
           <div>
-            <Link href="/dashboard" className="inline-flex items-center gap-2 text-xs font-bold text-slate-500 hover:text-slate-800 transition">
+            <Link href="/dashboard" className="inline-flex items-center gap-2 text-xs font-bold text-slate-500 hover:text-blue-600 transition">
               <ArrowLeft size={14} /> Voltar ao Painel Geral
             </Link>
           </div>
@@ -98,8 +105,9 @@ export default function AcompanhamentoPage() {
           <div className="border-b border-slate-200 pb-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
               <h1 className="text-3xl font-black text-slate-900 flex items-center gap-3 tracking-tight">
+                {/* ÍCONE ATUALIZADO PARA COMPATIBILIDADE VISUAL */}
                 <div className="bg-blue-600 p-2 rounded-2xl text-white shadow-sm">
-                  <TrendingUp size={22} />
+                  <Users size={24} />
                 </div>
                 Dashboard de Acompanhamento
               </h1>

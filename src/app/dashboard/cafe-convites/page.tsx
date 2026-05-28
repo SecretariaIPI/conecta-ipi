@@ -20,7 +20,6 @@ interface VisitanteCafe {
   statusFollowup: string
 }
 
-// O nome da função agora bate exatamente com a convenção da rota do Next.js
 export default function CafeConvitesPage() {
   const [loading, setLoading] = useState(true)
   const [visitantes, setVisitantes] = useState<VisitanteCafe[]>([])
@@ -40,10 +39,11 @@ export default function CafeConvitesPage() {
     try {
       setLoading(true)
 
+      // Busca followups com status 'confirmado' OU 'resposta_positiva'
       const { data: followups, error: fError } = await supabase
         .from('visitantes_followup')
         .select('visitante_id, status')
-        .eq('status', 'confirmado')
+        .in('status', ['confirmado', 'resposta_positiva'])
 
       if (fError || !followups || followups.length === 0) {
         setVisitantes([])
@@ -51,12 +51,13 @@ export default function CafeConvitesPage() {
         return
       }
 
-      const idsConfirmados = followups.map(f => f.visitante_id)
+      // Remove IDs duplicados caso o visitante possua mais de um registro histórico ativo
+      const idsFiltro = Array.from(new Set(followups.map(f => f.visitante_id)))
 
       const { data: dadosVisitantes, error: vError } = await supabase
         .from('visitantes')
         .select('id, nome, telefone')
-        .in('id', idsConfirmados)
+        .in('id', idsFiltro)
 
       if (vError || !dadosVisitantes) {
         setVisitantes([])
@@ -64,18 +65,22 @@ export default function CafeConvitesPage() {
         return
       }
 
-      const listaPronta: VisitanteCafe[] = dadosVisitantes.map((v) => ({
-        id: v.id,
-        nome: v.nome || 'Não identificado',
-        telefone: v.telefone || null,
-        statusFollowup: 'confirmado'
-      }))
+      // Mapeia os dados associando o status correspondente encontrado
+      const listaPronta: VisitanteCafe[] = dadosVisitantes.map((v) => {
+        const fUp = followups.find(f => f.visitante_id === v.id)
+        return {
+          id: v.id,
+          nome: v.nome || 'Não identificado',
+          telefone: v.telefone || null,
+          statusFollowup: fUp?.status || 'resposta_positiva'
+        }
+      })
 
       setVisitantes(listaPronta)
       setSelecionados(listaPronta.filter(v => v.telefone && v.telefone.trim() !== '').map(v => v.id))
 
     } catch (err) {
-      console.error('Erro ao mapear lista de convites do café:', err)
+      console.error('Erro ao buscar lista expandida do café:', err)
     } finally {
       setLoading(false)
     }
@@ -125,14 +130,13 @@ export default function CafeConvitesPage() {
     return (
       <div className="min-h-[60vh] flex flex-col items-center justify-center gap-2 text-slate-400">
         <Loader2 className="animate-spin text-amber-500" size={32} />
-        <span className="text-xs font-bold tracking-wider uppercase">Sincronizando confirmados do Café...</span>
+        <span className="text-xs font-bold tracking-wider uppercase">Sincronizando contatos e confirmados...</span>
       </div>
     )
   }
 
   return (
     <div className="max-w-5xl mx-auto space-y-6 p-4 sm:p-6 lg:p-8">
-      
       <div>
         <Link href="/dashboard/acompanhamento" className="inline-flex items-center gap-2 text-xs font-bold text-slate-500 hover:text-amber-600 transition-colors">
           <ArrowLeft size={14} /> Voltar ao Acompanhamento
@@ -145,16 +149,15 @@ export default function CafeConvitesPage() {
             <div className="bg-amber-500 p-2 rounded-2xl text-white shadow-sm">
               <Coffee size={22} />
             </div>
-            Convite: Grupo do Café com o Pastor
+            Primeiro Convite: Café com o Pastor
           </h1>
           <p className="text-slate-500 text-sm mt-1">
-            Lista baseada em tempo real nos visitantes com status <span className="font-bold text-amber-600 uppercase">"Confirmado Café"</span>.
+            Exibindo contatos com <span className="font-bold text-emerald-600">Resposta Positiva</span> ou já <span className="font-bold text-amber-600">Confirmados no Café</span>.
           </p>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        
         {/* Configurações */}
         <div className="space-y-4 lg:col-span-1">
           <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4 shadow-sm">
@@ -182,7 +185,6 @@ export default function CafeConvitesPage() {
                 {copiado ? <Check size={14} className="text-emerald-600" /> : <Copy size={14} />}
               </button>
             </div>
-            
             <div className="space-y-1">
               <label className="text-xxs font-black text-slate-400 uppercase">Mensagem Base</label>
               <textarea 
@@ -201,9 +203,8 @@ export default function CafeConvitesPage() {
             <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
               <div className="flex items-center gap-2">
                 <Users size={16} className="text-slate-400" />
-                <h2 className="font-bold text-sm text-slate-800">Confirmados no Café ({visitantes.length})</h2>
+                <h2 className="font-bold text-sm text-slate-800">Prontos para o Convite ({visitantes.length})</h2>
               </div>
-              
               {visitantes.length > 0 && (
                 <button onClick={alternarTodos} className="text-xxs font-black text-amber-600 hover:underline uppercase">
                   {selecionados.length === visitantes.length ? 'Desmarcar Todos' : 'Selecionar Todos'}
@@ -214,8 +215,7 @@ export default function CafeConvitesPage() {
             <div className="divide-y divide-slate-100 max-h-[500px] overflow-y-auto">
               {visitantes.length === 0 ? (
                 <div className="p-8 text-center text-slate-400 text-xs font-medium space-y-2">
-                  <p>Nenhuma pessoa com status "Confirmado Café" no momento.</p>
-                  <p className="text-xxs text-slate-400 font-normal">Mude o status de um visitante para "Confirmado Café" na listagem para ele aparecer aqui.</p>
+                  <p>Nenhum visitante localizado nestas etapas no momento.</p>
                 </div>
               ) : (
                 visitantes.map((v) => {
@@ -233,11 +233,19 @@ export default function CafeConvitesPage() {
                           className="w-4 h-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500 disabled:opacity-40 cursor-pointer"
                         />
                         <div>
-                          <p className="text-xs font-bold text-slate-900">{v.nome}</p>
-                          <p className="text-xxs text-slate-400">{v.telefone || 'Sem número cadastrado'}</p>
+                          <div className="flex items-center gap-2">
+                            <p className="text-xs font-bold text-slate-900">{v.nome}</p>
+                            <span className={`text-[9px] px-1.5 py-0.5 rounded-md font-extrabold uppercase tracking-wide ${
+                              v.statusFollowup === 'confirmado' 
+                                ? 'bg-amber-50 text-amber-700 border border-amber-100' 
+                                : 'bg-emerald-50 text-emerald-700 border border-emerald-100'
+                            }`}>
+                              {v.statusFollowup === 'confirmado' ? 'Confirmado Café' : 'Resposta Positiva'}
+                            </span>
+                          </div>
+                          <p className="text-xxs text-slate-400 mt-0.5">{v.telefone || 'Sem número cadastrado'}</p>
                         </div>
                       </div>
-
                       <div>
                         {foneValido ? (
                           <button
@@ -255,18 +263,9 @@ export default function CafeConvitesPage() {
                 })
               )}
             </div>
-
-            {visitantes.length > 0 && (
-              <div className="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-xxs font-bold text-slate-500">
-                <span>{selecionados.length} selecionados</span>
-                <p className="text-slate-400 font-normal">Disparos manuais via wa.me</p>
-              </div>
-            )}
           </div>
         </div>
-
       </div>
-
     </div>
   )
 }

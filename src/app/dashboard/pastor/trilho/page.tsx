@@ -1,0 +1,370 @@
+'use client'
+
+import { useEffect, useState } from 'react'
+import Link from 'next/link'
+import { createClient } from '@supabase/supabase-js'
+import { 
+  Loader2, ArrowLeft, Plus, MoveRight, 
+  MessageSquare, X, Save
+} from 'lucide-react'
+
+// Inicialização do cliente Supabase
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+)
+
+// Definição das Interfaces de Dados
+interface ItemTrilho {
+  id: string
+  pessoa_id: string
+  etapa_atual: 'SALA_DE_NOVOS' | 'BATISMO_RECEBIMENTO' | 'FASE_2_ENGAJAMENTO' | 'FASE_3_MINISTERIO'
+  gc_vinculado: string | null
+  curso_atual: string | null
+  ministerio_ativo: string | null
+  ultima_interacao: string
+  visitantes: { nome: string; telefone: string | null } | null
+}
+
+interface CadastroSimples { id: string; nome: string }
+interface ItemListaAux { id: string; nome: string }
+interface NotaPastoral { id: string; texto: string; criado_em: string; autor: string }
+
+export default function TrilhoCrescimentoPage() {
+  const [loading, setLoading] = useState(true)
+  const [itens, setItens] = useState<ItemTrilho[]>([])
+  const [pessoasDisponiveis, setPessoasDisponiveis] = useState<CadastroSimples[]>([])
+  const [gcsDisponiveis, setGcsDisponiveis] = useState<ItemListaAux[]>([])
+  const [ministeriosDisponiveis, setMinisteriosDisponiveis] = useState<ItemListaAux[]>([])
+  
+  const [pessoaSelecionada, setPessoaSelecionada] = useState('')
+  const [inserindo, setInserindo] = useState(false)
+
+  // Estados do Modal do Prontuário Pastoral
+  const [trilhoFoco, setTrilhoFoco] = useState<ItemTrilho | null>(null)
+  const [notasDoFoco, setNotasDoFoco] = useState<NotaPastoral[]>([])
+  const [novaNotaTexto, setNovaNotaTexto] = useState('')
+  const [salvandoNota, setSalvandoNota] = useState(false)
+
+  // Carregamento inicial de dados cruzados do ecossistema
+  async function carregarDados() {
+    try {
+      setLoading(true)
+      
+      // Busca as pessoas que já estão no trilho
+      const { data: trilhoData } = await supabase
+        .from('trilho_crescimento')
+        .select('id, pessoa_id, etapa_atual, gc_vinculado, curso_atual, ministerio_ativo, ultima_interacao, visitantes(nome, telefone)')
+      
+      setItens((trilhoData as unknown as ItemTrilho[]) || [])
+
+      // Busca todos os visitantes para o seletor de entrada (filtra quem já está no trilho)
+      const { data: visitantesData } = await supabase.from('visitantes').select('id, nome').order('nome')
+      if (visitantesData) {
+        const jaNoTrilho = new Set((trilhoData || []).map(t => t.pessoa_id))
+        setPessoasDisponiveis(visitantesData.filter(v => !jaNoTrilho.has(v.id)))
+      }
+
+      // Busca listas auxiliares para os prompts de vinculação de GCs e Ministérios
+      const { data: gcData } = await supabase.from('celulas_gcs').select('id, nome').order('nome')
+      setGcsDisponiveis(gcData || [])
+
+      const { data: minData } = await supabase.from('ministerios').select('id, nome').order('nome')
+      setMinisteriosDisponiveis(minData || [])
+
+    } catch (err) {
+      console.error('Erro ao sincronizar tabelas operacionais:', err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    carregarDados()
+  }, [])
+
+  // Gerenciador de Notas Pastorais (Prontuário)
+  async function abrirModalNotas(item: ItemTrilho) {
+    setTrilhoFoco(item)
+    setNovaNotaTexto('')
+    const { data } = await supabase
+      .from('notas_pastorais')
+      .select('*')
+      .eq('trilho_id', item.id)
+      .order('criado_em', { ascending: false })
+    setNotasDoFoco(data || [])
+  }
+
+  async function adicionarNotaPastoral(e: React.FormEvent) {
+    e.preventDefault()
+    if (!novaNotaTexto.trim() || !trilhoFoco) return
+    try {
+      setSalvandoNota(true)
+      const { error } = await supabase
+        .from('notas_pastorais')
+        .insert({ 
+          trilho_id: trilhoFoco.id, 
+          texto: novaNotaTexto, 
+          autor: 'Acompanhamento Pastoral' 
+        })
+      if (error) throw error
+      
+      setNovaNotaTexto('')
+      
+      // Recarrega o histórico interno do modal
+      const { data } = await supabase
+        .from('notas_pastorais')
+        .select('*')
+        .eq('trilho_id', trilhoFoco.id)
+        .order('criado_em', { ascending: false })
+      setNotasDoFoco(data || [])
+    } catch (err) {
+      alert('Erro ao arquivar nota pastoral no banco.')
+    } finally {
+      setSalvandoNota(false)
+    }
+  }
+
+  // Avanço manual com escrita de histórico e atribuição dinâmica
+  async function moverEtapa(id: string, etapaAtual: string, pessoaId: string) {
+    const etapas: ItemTrilho['etapa_atual'][] = ['SALA_DE_NOVOS', 'BATISMO_RECEBIMENTO', 'FASE_2_ENGAJAMENTO', 'FASE_3_MINISTERIO']
+    const idx = etapas.indexOf(etapaAtual as any)
+    if (idx === -1 || idx === etapas.length - 1) return
+    const novaEtapa = etapas[idx + 1]
+
+    let updatePayload: any = { etapa_atual: novaEtapa, ultima_interacao: new Date().toISOString() }
+
+    // Interceptores de Vinculação Baseados no Banco
+    if (novaEtapa === 'FASE_2_ENGAJAMENTO') {
+      const opcoesGc = gcsDisponiveis.map(g => g.nome).join(', ')
+      const gcNome = prompt(`Vincular a qual GC? Opções disponíveis:\n${opcoesGc || 'Nenhum GC cadastrado'}`)
+      if (gcNome) updatePayload.gc_vinculado = gcNome
+    }
+    if (novaEtapa === 'FASE_3_MINISTERIO') {
+      const opcoesMin = ministeriosDisponiveis.map(m => m.nome).join(', ')
+      const minNome = prompt(`Vincular a qual Ministério de serviço?\n${opcoesMin || 'Nenhum Ministério cadastrado'}`)
+      if (minNome) updatePayload.ministerio_ativo = minNome
+    }
+
+    try {
+      // Atualiza a etapa atual da pessoa no trilho
+      await supabase.from('trilho_crescimento').update(updatePayload).eq('id', id)
+      // Grava na tabela de histórico para auditoria futura do conselho
+      await supabase.from('historico_trilho').insert({ 
+        pessoa_id: pessoaId, 
+        etapa_anterior: etapaAtual, 
+        etapa_nova: novaEtapa 
+      })
+      carregarDados()
+    } catch (err) {
+      alert('Erro ao atualizar fluxo do cartão.')
+    }
+  }
+
+  async function adicionarAoTrilho(e: React.FormEvent) {
+    e.preventDefault()
+    if (!pessoaSelecionada) return
+    try {
+      setInserindo(true)
+      const { error } = await supabase
+        .from('trilho_crescimento')
+        .insert({ pessoa_id: pessoaSelecionada, etapa_atual: 'SALA_DE_NOVOS' })
+      if (error) throw error
+      setPessoaSelecionada('')
+      carregarDados()
+    } catch (err) {
+      alert('Erro ao inserir cadastro na primeira etapa.')
+    } finally {
+      setInserindo(false)
+    }
+  }
+
+  const filtrarPorEtapa = (etapa: string) => itens.filter(i => i.etapa_atual === etapa)
+
+  if (loading) {
+    return (
+      <div className="min-h-[60vh] flex flex-col items-center justify-center gap-2 text-slate-400">
+        <Loader2 className="animate-spin text-indigo-600" size={32} />
+        <span className="text-xs font-bold tracking-wider uppercase">Sincronizando Ecossistema de Integração...</span>
+      </div>
+    )
+  }
+
+  return (
+    <div className="max-w-7xl mx-auto space-y-6 p-4 sm:p-6 lg:p-8 relative">
+      
+      {/* Botão de Retorno */}
+      <div>
+        <Link href="/dashboard/pastor/visao-geral" className="inline-flex items-center gap-2 text-xs font-bold text-slate-500 hover:text-indigo-600 transition-colors">
+          <ArrowLeft size={14} /> Voltar ao Painel Principal
+        </Link>
+      </div>
+
+      {/* Cabeçalho Operacional */}
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+            Trilho de Crescimento Coletivo
+          </h1>
+          <p className="text-slate-500 text-sm font-medium">Monitore a consolidação pós-café. Ninguém pode ficar estacionado ou invisível.</p>
+        </div>
+
+        {/* Formulário Rápido de Inclusão no Topo */}
+        {pessoasDisponiveis.length > 0 && (
+          <form onSubmit={adicionarAoTrilho} className="flex items-center gap-2 bg-white p-2 border border-slate-200 rounded-xl shadow-xs">
+            <select 
+              value={pessoaSelecionada}
+              onChange={(e) => setPessoaSelecionada(e.target.value)}
+              className="text-xs bg-transparent font-semibold text-slate-700 focus:outline-none p-1.5"
+            >
+              <option value="">Inserir alguém do café no Trilho...</option>
+              {pessoasDisponiveis.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
+            </select>
+            <button type="submit" disabled={inserindo || !pessoaSelecionada} className="bg-emerald-600 text-white p-2 rounded-lg hover:bg-emerald-700 transition disabled:opacity-40">
+              <Plus size={14} />
+            </button>
+          </form>
+        )}
+      </div>
+
+      {/* Kanban de Colunas Roláveis (Layout Corrigido) */}
+      <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-thin select-none snap-x">
+        {[
+          { id: 'SALA_DE_NOVOS', label: '1. Sala de Novos (Café)', color: 'bg-slate-200' },
+          { id: 'BATISMO_RECEBIMENTO', label: '2. Celebração / Batismo', color: 'bg-indigo-100' },
+          { id: 'FASE_2_ENGAJAMENTO', label: '3. F. 2: GC e Cursos', color: 'bg-amber-100' },
+          { id: 'FASE_3_MINISTERIO', label: '4. F. 3: Ministério', color: 'bg-emerald-100' },
+        ].map(col => (
+          <div key={col.id} className="bg-slate-50 border border-slate-200 p-4 rounded-2xl flex flex-col w-[300px] shrink-0 snap-start">
+            <div className="border-b pb-2 mb-3 flex justify-between items-center">
+              <h3 className="text-xs font-black text-slate-700 uppercase tracking-wider truncate">{col.label}</h3>
+              <span className={`font-bold px-2 py-0.5 rounded-md text-xxs ${col.color}`}>{filtrarPorEtapa(col.id).length}</span>
+            </div>
+            
+            <div className="space-y-3 flex-1 overflow-y-auto max-h-[58vh] pr-1">
+              {filtrarPorEtapa(col.id).map(item => {
+                const dias = Math.floor((new Date().getTime() - new Date(item.ultima_interacao).getTime()) / (1000 * 60 * 60 * 24))
+                const critico = dias >= 21
+                
+                return (
+                  <div key={item.id} className={`bg-white border rounded-xl p-4 space-y-3 relative border-slate-200 shadow-xs hover:shadow-md transition-shadow ${critico ? 'border-rose-300 bg-rose-50/10' : ''}`}>
+                    
+                    {/* Identificação Básica */}
+                    <div className="overflow-hidden">
+                      <h4 className="font-bold text-slate-900 text-sm tracking-tight truncate">{item.visitantes?.nome || 'Sem nome'}</h4>
+                      <p className="text-xs text-slate-400 font-medium mt-0.5 truncate">{item.visitantes?.telefone || 'Sem telefone'}</p>
+                    </div>
+
+                    {/* Blocos de Alerta e Vínculos de comunidade */}
+                    <div className="space-y-1">
+                      {item.etapa_atual === 'FASE_2_ENGAJAMENTO' && !item.gc_vinculado && (
+                        <span className="block text-xxs bg-amber-50 text-amber-700 border border-amber-200 font-bold px-2 py-1 rounded-lg">
+                          ⚠️ Sem GC vinculado
+                        </span>
+                      )}
+                      {item.gc_vinculado && (
+                        <span className="block text-xxs bg-emerald-50 text-emerald-700 font-bold px-2 py-1 rounded-lg border border-emerald-100 truncate">
+                          🏠 {item.gc_vinculado}
+                        </span>
+                      )}
+                      {item.ministerio_ativo && (
+                        <span className="block text-xxs bg-indigo-50 text-indigo-700 font-bold px-2 py-1 rounded-lg border border-indigo-100 truncate">
+                          🛠️ {item.ministerio_ativo}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Linha Independente para os Dias na Etapa */}
+                    <div className="text-xxs font-bold text-slate-400">
+                      <span>Há {dias}d</span>
+                    </div>
+
+                    {/* Rodapé Operacional com Prontuário Visível */}
+                    <div className="pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs gap-2">
+                      <button 
+                        type="button"
+                        onClick={() => abrirModalNotas(item)}
+                        className="text-slate-500 hover:text-indigo-600 hover:bg-slate-50 p-1.5 rounded-lg flex items-center gap-1 font-bold transition-colors"
+                      >
+                        <MessageSquare size={13} />
+                        <span>Prontuário</span>
+                      </button>
+
+                      {item.etapa_atual !== 'FASE_3_MINISTERIO' && (
+                        <button 
+                          type="button"
+                          onClick={() => moverEtapa(item.id, item.etapa_atual, item.pessoa_id)}
+                          className="text-indigo-600 hover:text-indigo-800 font-bold flex items-center gap-0.5 p-1.5 hover:bg-indigo-50 rounded-lg transition-colors"
+                        >
+                          <span>Avançar</span>
+                          <MoveRight size={13} />
+                        </button>
+                      )}
+                    </div>
+
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* MODAL DE PRONTUÁRIO PASTORAL (FLUTUANTE) */}
+      {trilhoFoco && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+          <div className="bg-white w-full max-w-md rounded-2xl shadow-xl border overflow-hidden flex flex-col max-h-[85vh]">
+            
+            {/* Header do Modal */}
+            <div className="p-4 bg-slate-900 text-white flex justify-between items-center">
+              <div>
+                <h3 className="text-sm font-black tracking-tight">{trilhoFoco.visitantes?.nome}</h3>
+                <p className="text-xxs text-slate-400">Prontuário de Cuidado Pastoral e Integração</p>
+              </div>
+              <button onClick={() => setTrilhoFoco(null)} className="text-slate-400 hover:text-white">
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Input para Salvar Nova Nota */}
+            <form onSubmit={adicionarNotaPastoral} className="p-4 border-b bg-slate-50 flex gap-2 items-end">
+              <div className="flex-1 space-y-1">
+                <label className="text-xxs font-black text-slate-500 uppercase tracking-wider">Nova Nota / Registro de Atendimento</label>
+                <input 
+                  type="text" 
+                  value={novaNotaTexto} 
+                  onChange={(e) => setNovaNotaTexto(e.target.value)}
+                  placeholder="Ex: Ligamos hoje, vai começar o curso domingo..." 
+                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-medium text-slate-800 focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+              <button type="submit" disabled={salvandoNota || !novaNotaTexto.trim()} className="bg-indigo-600 text-white p-2.5 rounded-lg font-bold hover:bg-indigo-700 transition disabled:opacity-50">
+                <Save size={14} />
+              </button>
+            </form>
+
+            {/* Lista com as Notas Anteriores */}
+            <div className="p-4 flex-1 overflow-y-auto space-y-3.5 bg-white">
+              <h4 className="text-xxs font-black text-slate-400 uppercase tracking-wider">Histórico de Atendimentos</h4>
+              {notasDoFoco.length === 0 ? (
+                <p className="text-center py-6 text-xxs font-medium text-slate-400">Nenhuma anotação registrada para este membro ainda.</p>
+              ) : (
+                notasDoFoco.map(nota => (
+                  <div key={nota.id} className="bg-slate-50 border border-slate-150 p-3 rounded-xl space-y-1 text-xs">
+                    <div className="flex justify-between items-center text-xxs font-bold text-slate-400">
+                      <span>{nota.autor}</span>
+                      <span>{new Date(nota.criado_em).toLocaleDateString('pt-BR')}</span>
+                    </div>
+                    <p className="text-slate-700 font-medium leading-relaxed">{nota.texto}</p>
+                  </div>
+                ))
+              )}
+            </div>
+
+          </div>
+        </div>
+      )}
+
+    </div>
+  )
+}
