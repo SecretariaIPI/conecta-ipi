@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { createClient } from '@supabase/supabase-js'
-import { UserPlus, Trash2, Phone, MapPin, Eye, Users } from 'lucide-react'
+import { UserPlus, Trash2, Phone, MapPin, Eye, Users, Calendar } from 'lucide-react'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || '',
@@ -43,7 +43,7 @@ export default function VisitantesPage() {
       const { data, error } = await supabase
         .from('visitantes')
         .select('*')
-        .order('created_at', { ascending: false })
+        .order('data_visita', { ascending: false, nullsFirst: false })
 
       if (error) {
         setErro(error.message)
@@ -61,6 +61,29 @@ export default function VisitantesPage() {
   useEffect(() => {
     carregarVisitantes()
   }, [])
+
+  function formatarDataExtenso(dataStr: string) {
+    const [ano, mes, dia] = dataStr.split('-')
+    const dataObj = new Date(Number(ano), Number(mes) - 1, Number(dia))
+    return dataObj.toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' })
+  }
+
+  // Agrupamento dos visitantes por data_visita
+  const visitantesAgrupados = visitantes.reduce((grupos: { [key: string]: Visitante[] }, visitante) => {
+    const chaveData = visitante.data_visita || 'sem_data'
+    if (!grupos[chaveData]) {
+      grupos[chaveData] = []
+    }
+    grupos[chaveData].push(visitante)
+    return grupos
+  }, {})
+
+  // Ordenação das chaves de data (mais recentes primeiro)
+  const chavesOrdenadas = Object.keys(visitantesAgrupados).sort((a, b) => {
+    if (a === 'sem_data') return 1
+    if (b === 'sem_data') return -1
+    return new Date(b).getTime() - new Date(a).getTime()
+  })
 
   async function excluirVisitante(id: string, nome: string) {
     const confirmar = window.confirm(
@@ -166,7 +189,7 @@ export default function VisitantesPage() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto space-y-8">
+    <div className="max-w-7xl mx-auto space-y-8 p-4 md:p-0">
       <div>
         <h1 className="text-3xl font-bold text-slate-900 flex items-center gap-2">
           <UserPlus className="text-blue-600" size={32} /> CRM Pastoral e Consolidação
@@ -174,7 +197,7 @@ export default function VisitantesPage() {
         <p className="text-slate-500 mt-1">Gerencie a recepção, acompanhamento e a integração de novos membros.</p>
       </div>
 
-      {/* Formulário de Novo Cadastro sem gráficos */}
+      {/* Formulário de Novo Cadastro */}
       <div className="bg-white rounded-3xl border border-slate-200/80 shadow-sm p-6 space-y-4">
         <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
           <Users size={18} className="text-slate-500" /> Novo Cadastro
@@ -222,40 +245,81 @@ export default function VisitantesPage() {
         </button>
       </div>
 
-      {/* Tabela de Registros */}
-      <div className="bg-white rounded-3xl border border-slate-200/80 shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="border-b border-slate-100 bg-slate-50 text-slate-500 font-semibold text-xs uppercase tracking-wider">
-                <th className="p-4 pl-6">Nome Completo</th>
-                <th className="p-4">Contato</th>
-                <th className="p-4">Localidade</th>
-                <th className="p-4">Origem</th>
-                <th className="p-4">Primeira Visita</th>
-                <th className="p-4 text-center pr-6">Ações</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 text-sm text-slate-700">
-              {visitantes.map((visitante) => (
-                <tr key={visitante.id} className="hover:bg-slate-50/60 transition-colors">
-                  <td className="p-4 pl-6 font-bold text-slate-900 max-w-xs truncate">
-                    <Link href={`/visitantes/${visitante.id}`} className="text-blue-600 hover:text-blue-800 flex items-center gap-1.5">
-                      <Eye size={14} className="inline" /> {visitante.nome}
-                    </Link>
-                  </td>
-                  <td className="p-4 text-slate-500 whitespace-nowrap"><span className="flex items-center gap-1"><Phone size={12} /> {visitante.telefone || '-'}</span></td>
-                  <td className="p-4 text-slate-500 max-w-[120px] truncate"><span className="flex items-center gap-1"><MapPin size={12} /> {visitante.cidade || '-'}</span></td>
-                  <td className="p-4 text-xs font-medium text-slate-600 whitespace-nowrap"><span className="bg-slate-100 px-2 py-1 rounded-md">{visitante.origem || 'Não informado'}</span></td>
-                  <td className="p-4 text-slate-500 whitespace-nowrap">{visitante.data_visita ? new Date(visitante.data_visita).toLocaleDateString('pt-BR') : '-'}</td>
-                  <td className="p-4 text-center pr-6 whitespace-nowrap">
-                    <button onClick={() => excluirVisitante(visitante.id, visitante.nome)} className="bg-rose-50 text-rose-600 hover:bg-rose-600 hover:text-white p-2 rounded-xl transition duration-150 inline-flex items-center justify-center"><Trash2 size={16} /></button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+      {/* Listagem Separada Dinamicamente por Grupos de Datas */}
+      <div className="space-y-8">
+        {chavesOrdenadas.map((dataChave) => {
+          const listaVisitantesDoDia = visitantesAgrupados[dataChave]
+          const ehSemData = dataChave === 'sem_data'
+
+          return (
+            <div key={dataChave} className="space-y-3">
+              
+              {/* Divisória / Cabeçalho do Grupo de Visita */}
+              <div className="flex items-center gap-3 px-2">
+                <div className={`p-2 rounded-xl border ${ehSemData ? 'bg-slate-100 text-slate-500 border-slate-200' : 'bg-blue-50 text-blue-600 border-blue-100'}`}>
+                  <Calendar size={16} />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-800 tracking-tight">
+                    {ehSemData ? 'Sem data de visita cadastrada' : formatarDataExtenso(dataChave)}
+                  </h3>
+                  <p className="text-xxs text-slate-400 font-medium">
+                    {listaVisitantesDoDia.length} {listaVisitantesDoDia.length === 1 ? 'visitante recebido' : 'visitantes recebidos'}
+                  </p>
+                </div>
+                <div className="grow border-t border-dashed border-slate-200/80 ml-2" />
+              </div>
+
+              {/* Lista de Cards de Visitantes */}
+              <div className="grid grid-cols-1 gap-2.5">
+                {listaVisitantesDoDia.map((visitante) => (
+                  <div 
+                    key={visitante.id} 
+                    className="bg-white rounded-2xl border border-slate-200/70 hover:border-blue-300 shadow-xs p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all duration-200 group"
+                  >
+                    {/* Bloco de Identificação */}
+                    <div className="space-y-1.5 max-w-sm">
+                      <div className="flex items-center gap-2">
+                        <Link 
+                          href={`/visitantes/${visitante.id}`} 
+                          className="font-bold text-slate-900 hover:text-blue-600 transition flex items-center gap-1.5 text-sm"
+                        >
+                          <Eye size={14} className="text-slate-400 group-hover:text-blue-500 transition" /> 
+                          {visitante.nome}
+                        </Link>
+                      </div>
+                      
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xxs font-medium text-slate-500">
+                        <span className="flex items-center gap-1 bg-slate-50 border border-slate-100 px-2 py-0.5 rounded-md">
+                          <Phone size={11} className="text-slate-400" /> {visitante.telefone || '-'}
+                        </span>
+                        <span className="flex items-center gap-1 bg-slate-50 border border-slate-100 px-2 py-0.5 rounded-md">
+                          <MapPin size={11} className="text-slate-400" /> {visitante.cidade || '-'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Bloco de Origem e Ações */}
+                    <div className="flex items-center justify-between sm:justify-end gap-4 border-t sm:border-t-0 pt-3 sm:pt-0 border-slate-100">
+                      <span className="text-xxs font-semibold bg-slate-100/80 text-slate-600 border border-slate-200/40 px-2.5 py-1 rounded-lg max-w-[200px] truncate">
+                        {visitante.origem || 'Não informado'}
+                      </span>
+                      
+                      <button 
+                        onClick={() => excluirVisitante(visitante.id, visitante.nome)} 
+                        className="bg-rose-50 text-rose-600 hover:bg-rose-600 hover:text-white p-2.5 rounded-xl transition duration-150 flex items-center justify-center shrink-0 shadow-xs"
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
+
+                  </div>
+                ))}
+              </div>
+
+            </div>
+          )
+        })}
       </div>
     </div>
   )
