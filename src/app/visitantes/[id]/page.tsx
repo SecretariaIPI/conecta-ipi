@@ -66,13 +66,13 @@ const ETAPAS = [
 const STATUS_POR_ETAPA: Record<string, string[]> = {
   primeiro_contato: [
     'pendente',
-    'aguardando_resposta',
+    'realizado',
     'resposta_positiva',
     'arquivado'
   ],
   segundo_contato: [
     'pendente',
-    'aguardando_resposta',
+    'realizado',
     'resposta_positiva',
     'arquivado'
   ],
@@ -97,7 +97,7 @@ const STATUS_POR_ETAPA: Record<string, string[]> = {
 
 const STATUS_LABELS: Record<string, string> = {
   pendente: 'Pendente',
-  aguardando_resposta: 'Aguardando Resposta',
+  realizado: 'Realizado',
   resposta_positiva: 'Resposta Positiva',
   arquivado: 'Arquivado',
   em_oracao: 'Em Oração',
@@ -112,7 +112,7 @@ const STATUS_LABELS: Record<string, string> = {
 
 const STATUS_CLASSES: Record<string, string> = {
   pendente: 'bg-blue-50 text-blue-700',
-  aguardando_resposta: 'bg-amber-50 text-amber-700',
+  realizado: 'bg-emerald-50 text-emerald-700',
   resposta_positiva: 'bg-emerald-50 text-emerald-700',
   arquivado: 'bg-rose-50 text-rose-700',
   em_oracao: 'bg-purple-50 text-purple-700',
@@ -178,7 +178,6 @@ export default function FichaVisitantePage() {
   function responsavelDaEtapa(etapa: string) {
     const etapaTexto = (etapa || '').toUpperCase();
 
-    // 1. Procura se existe alguma configuração dinâmica salva no banco
     const responsavelConfigurado = configEtapas.find(
       (item) => (item.etapa || '').toUpperCase() === etapaTexto
     )?.responsavel_nome;
@@ -187,17 +186,16 @@ export default function FichaVisitantePage() {
       return responsavelConfigurado;
     }
 
-    // 2. Se não encontrar, cai nas regras fixas de responsáveis por etapa
-    if (etapaTexto.includes('PRIMEIRO_CONTATO') || etapaTexto.includes('PRIMEIRO_CONTATO') || etapaTexto.includes('1')) {
+    if (etapaTexto.includes('PRIMEIRO_CONTATO') || etapaTexto.includes('1')) {
       return 'Secretária';
     }
-    if (etapaTexto.includes('SEGUNDO_CONTATO') || etapaTexto.includes('SEGUNDO_CONTATO') || etapaTexto.includes('2')) {
+    if (etapaTexto.includes('SEGUNDO_CONTATO') || etapaTexto.includes('2')) {
       return 'Pastor Cleber';
     }
-    if (etapaTexto.includes('INTERCESSAO') || etapaTexto.includes('POSITIVO') || etapaTexto.includes('3')) {
+    if (etapaTexto.includes('INTERCESSAO') || etapaTexto.includes('3')) {
       return 'Intercessão';
     }
-    if (etapaTexto.includes('CONVITE_CAFE') || etapaTexto.includes('POS_CAFE') || etapaTexto.includes('CAFÉ') || etapaTexto.includes('4') || etapaTexto.includes('PARTICIPOU') || etapaTexto.includes('5')) {
+    if (etapaTexto.includes('CONVITE_CAFE') || etapaTexto.includes('POS_CAFE') || etapaTexto.includes('CAFÉ') || etapaTexto.includes('4') || etapaTexto.includes('5')) {
       return 'Consolidação';
     }
 
@@ -342,7 +340,6 @@ export default function FichaVisitantePage() {
               </div>
             </div>
 
-            {/* Renderização das 5 etapas padrão */}
             {ETAPAS.map((etapa) => {
               const statusAtual =
                 followups.find((item) => item.etapa === etapa)?.status ||
@@ -429,7 +426,7 @@ export default function FichaVisitantePage() {
                     </button>
 
                     {feedback[etapa] && (
-                      <span className="text-emerald-600 font-semibold text-sm animate-fade-in">
+                      <span className="text-emerald-600 font-semibold text-sm">
                         ✓ Registro salvo!
                       </span>
                     )}
@@ -454,7 +451,6 @@ export default function FichaVisitantePage() {
               )
             })}
 
-            {/* Checklist de Integração */}
             <ChecklistIntegracaoComponent 
               visitanteId={id} 
               onUpdate={carregarDados} 
@@ -462,7 +458,6 @@ export default function FichaVisitantePage() {
             />
           </div>
 
-          {/* Histórico Lateral */}
           <div>
             <div className="bg-white rounded-3xl p-6 border border-slate-200/60 shadow-sm sticky top-8 max-h-[85vh] overflow-y-auto">
               <h2 className="text-xl font-bold text-slate-900 mb-6 flex gap-2 items-center border-b pb-4">
@@ -501,7 +496,6 @@ export default function FichaVisitantePage() {
   )
 }
 
-/* 📋 SUBSISTEMA: Checklist de Integração Pastoral */
 function ChecklistIntegracaoComponent({ 
   visitanteId, 
   onUpdate, 
@@ -604,7 +598,7 @@ function ChecklistIntegracaoComponent({
       itens: [
         { campo: 'aceitou_jesus', label: 'Aceitou Jesus' },
         { campo: 'acompanhamento_pastoral', label: 'Recebe acompanhamento pastoral' },
-        { campo: 'pedido_oracao', label: 'Pedido de oração active' },
+        { campo: 'pedido_oracao', label: 'Pedido de oração ativo' },
       ]
     },
     {
