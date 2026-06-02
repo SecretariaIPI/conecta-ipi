@@ -50,7 +50,7 @@ export default function VisaoGeralPastorPage() {
     semMinisterio: 0
   })
 
-  useEffect(() => {
+ useEffect(() => {
     async function carregarMetricasEstrategicas() {
       try {
         setLoading(true)
@@ -98,17 +98,17 @@ export default function VisaoGeralPastorPage() {
           setRankingIgrejas(rankingOrdenado)
         }
 
-        // 2. Busca dados do Trilho de Crescimento
+        // 2. Busca dados do Trilho de Crescimento (Corrigido para pessoa_id)
         const { data: trilhoData, error: errT } = await supabase
           .from('trilho_crescimento')
-          .select('id, visitante_id, etapa_atual, ultima_interacao, gc_vinculado, ministerio_ativo')
+          .select('id, pessoa_id, etapa_atual, ultima_interacao, gc_vinculado, ministerio_ativo')
 
         if (errT) throw errT
 
-        // 3. Busca followups para cruzar validações de real movimentação
+        // 3. Busca followups para cruzar validações de real movimentação (Corrigido para pessoa_id)
         const { data: followupData } = await supabase
           .from('visitantes_followup')
-          .select('visitante_id, etapa, status')
+          .select('pessoa_id, etapa, status')
 
         const hoje = new Date()
         let salaNovos = 0 
@@ -119,36 +119,43 @@ export default function VisaoGeralPastorPage() {
         let sGC = 0
         let sMin = 0
 
-        // Armazena IDs que de fato completaram a transição para a Fase Café
+        // Armazena IDs que completaram a transição para a Fase Café (Aceita 'concluido' ou o botão amarelo 'realizado')
         const alcancouFaseCafe = new Set(
           followupData
-            ?.filter(f => f.etapa === 'convite_cafe' && f.status === 'concluido')
-            .map(f => f.visitante_id)
+            ?.filter(f => 
+              (f.etapa === 'convite_cafe' || f.etapa === 'cafe') && 
+              (f.status === 'concluido' || f.status === 'realizado')
+            )
+            .map(f => f.pessoa_id)
         )
 
         const visitantesComTrilhoAtivo = new Set<string>()
 
         if (trilhoData) {
           trilhoData.forEach(item => {
-            // Um membro só computa nas fases avançadas se ele tiver a validação de avanço ou registro ativo correspondente
-            if (item.etapa_atual === 'SALA_DE_NOVOS' && alcancouFaseCafe.has(item.visitante_id)) {
+            const idDoVinculo = item.pessoa_id;
+
+            if (!idDoVinculo) return;
+
+            // Computa corretamente quem está na Sala de Novos / Café ou avançou
+            if ((item.etapa_atual === 'SALA_DE_NOVOS' || item.etapa_atual === 'CAFE') && alcancouFaseCafe.has(idDoVinculo)) {
               salaNovos++
-              visitantesComTrilhoAtivo.add(item.visitante_id)
+              visitantesComTrilhoAtivo.add(idDoVinculo)
             } else if (item.etapa_atual === 'BATISMO_RECEBIMENTO') {
               batismo++
-              visitantesComTrilhoAtivo.add(item.visitante_id)
+              visitantesComTrilhoAtivo.add(idDoVinculo)
             } else if (item.etapa_atual === 'FASE_2_ENGAJAMENTO') {
               engajamento++
               if (!item.gc_vinculado) sGC++
-              visitantesComTrilhoAtivo.add(item.visitante_id)
+              visitantesComTrilhoAtivo.add(idDoVinculo)
             } else if (item.etapa_atual === 'FASE_3_MINISTERIO') {
               ministerio++
               if (!item.ministerio_ativo) sMin++
-              visitantesComTrilhoAtivo.add(item.visitante_id)
+              visitantesComTrilhoAtivo.add(idDoVinculo)
             }
 
-            // Cálculo exato de estagnação de fluxos em andamento
-            if (visitantesComTrilhoAtivo.has(item.visitante_id)) {
+            // Cálculo de estagnação (+21 dias)
+            if (visitantesComTrilhoAtivo.has(idDoVinculo)) {
               const ultimaInteracao = new Date(item.ultima_interacao || hoje)
               const diasParado = Math.floor((hoje.getTime() - ultimaInteracao.getTime()) / (1000 * 60 * 60 * 24))
               if (diasParado >= 21) {
@@ -158,10 +165,10 @@ export default function VisaoGeralPastorPage() {
           })
         }
 
-        // Todos os que não estão consolidados nas fases seguintes obrigatoriamente são Visitantes Puros
+        // Todos os que não estão no trilho ativo são Visitantes Puros
         const visitantesPuros = totalVis - visitantesComTrilhoAtivo.size
 
-        // Soma os cadastros parados sem nenhuma movimentação há mais de 21 dias na raiz do sistema
+        // Soma os cadastros parados na raiz do sistema
         visitantesData?.forEach(v => {
           if (!visitantesComTrilhoAtivo.has(v.id)) {
             const dataVis = new Date(v.data_visita || hoje)

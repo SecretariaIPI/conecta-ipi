@@ -112,7 +112,7 @@ const STATUS_LABELS: Record<string, string> = {
 
 const STATUS_CLASSES: Record<string, string> = {
   pendente: 'bg-blue-50 text-blue-700',
-  realizado: 'bg-emerald-50 text-emerald-700',
+  realizado: 'bg-amber-50 text-amber-700',      // Mantido em amarelo para o novo status
   resposta_positiva: 'bg-emerald-50 text-emerald-700',
   arquivado: 'bg-rose-50 text-rose-700',
   em_oracao: 'bg-purple-50 text-purple-700',
