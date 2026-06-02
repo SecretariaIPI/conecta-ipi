@@ -6,7 +6,7 @@ import { createClient } from '@supabase/supabase-js'
 import { 
   BarChart3, Loader2, AlertTriangle, Users, 
   TrendingUp, Footprints, Clock, ShieldAlert, 
-  ArrowLeft, Printer, Coffee, Eye, Church
+  ArrowLeft, Printer, Coffee, Church
 } from 'lucide-react'
 
 const supabase = createClient(
@@ -98,17 +98,17 @@ export default function VisaoGeralPastorPage() {
           setRankingIgrejas(rankingOrdenado)
         }
 
-        // 2. Busca dados do Trilho de Crescimento (Corrigido para pessoa_id)
+        // 2. CORRIGIDO: Busca dados do Trilho usando visitante_id
         const { data: trilhoData, error: errT } = await supabase
           .from('trilho_crescimento')
-          .select('id, pessoa_id, etapa_atual, ultima_interacao, gc_vinculado, ministerio_ativo')
+          .select('id, visitante_id, etapa_atual, ultima_interacao, gc_vinculado, ministerio_ativo')
 
         if (errT) throw errT
 
-        // 3. Busca followups para cruzar validações de real movimentação (Corrigido para pessoa_id)
+        // 3. CORRIGIDO: Busca followups usando a coluna real visitante_id
         const { data: followupData } = await supabase
           .from('visitantes_followup')
-          .select('pessoa_id, etapa, status')
+          .select('visitante_id, etapa, status')
 
         const hoje = new Date()
         let salaNovos = 0 
@@ -119,25 +119,28 @@ export default function VisaoGeralPastorPage() {
         let sGC = 0
         let sMin = 0
 
-        // Armazena IDs que completaram a transição para a Fase Café (Aceita 'concluido' ou o botão amarelo 'realizado')
+        // CORRIGIDO: Validação limpa e case-insensitive alinhada com as ações reais do banco (pos_cafe + compareceu)
         const alcancouFaseCafe = new Set(
-          followupData
-            ?.filter(f => 
-              (f.etapa === 'convite_cafe' || f.etapa === 'cafe') && 
-              (f.status === 'concluido' || f.status === 'realizado')
-            )
-            .map(f => f.pessoa_id)
+          (followupData || [])
+            .filter(f => {
+              const etapaBd = String(f.etapa || '').toLowerCase().trim()
+              const statusBd = String(f.status || '').toLowerCase().trim()
+              return (etapaBd === 'pos_cafe' && statusBd === 'compareceu') || 
+                     (etapaBd === 'convite_cafe' || etapaBd === 'cafe') && (statusBd === 'concluido' || statusBd === 'realizado')
+            })
+            .map(f => f.visitante_id)
         )
 
         const visitantesComTrilhoAtivo = new Set<string>()
 
         if (trilhoData) {
           trilhoData.forEach(item => {
-            const idDoVinculo = item.pessoa_id;
+            // Garante leitura segura caso mude entre visitante_id ou pessoa_id em tabelas legadas
+            const idDoVinculo = item.visitante_id || (item as any).pessoa_id;
 
             if (!idDoVinculo) return;
 
-            // Computa corretamente quem está na Sala de Novos / Café ou avançou
+            // Computa quem está na Sala de Novos / Café ou avançou pelas colunas do Kanban
             if ((item.etapa_atual === 'SALA_DE_NOVOS' || item.etapa_atual === 'CAFE') && alcancouFaseCafe.has(idDoVinculo)) {
               salaNovos++
               visitantesComTrilhoAtivo.add(idDoVinculo)
