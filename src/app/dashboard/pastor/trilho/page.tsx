@@ -47,14 +47,13 @@ export default function TrilhoCrescimentoPage() {
     try {
       setLoading(true)
       
-      // 1. MAPEAMENTO EXATO: O Supabase agora busca registros onde a etapa envolva 'cafe'
-      // independente se foi gravado como 'COMPARECEU', 'realizado' ou 'concluido'
+      // 1. Busca os registros do histórico de acompanhamento do café
       const { data: followupData } = await supabase
         .from('visitantes_followup')
         .select('pessoa_id, status')
         .or('etapa.eq.convite_cafe,etapa.eq.cafe')
 
-      // Filtra os IDs garantindo compatibilidade com maiúsculas/minúsculas vindas do formulário da imagem 3
+      // Filtra os IDs das pessoas confirmadas com o status correto do seu formulário
       const IDsValidosDoCafe = new Set(
         (followupData || [])
           .filter(f => {
@@ -64,17 +63,43 @@ export default function TrilhoCrescimentoPage() {
           .map(f => f.pessoa_id)
       )
       
-      // 2. Carrega as linhas estruturadas do Trilho
+      // 2. Busca todas as linhas puras da tabela do trilho de crescimento
       const { data: trilhoData } = await supabase
         .from('trilho_crescimento')
-        .select('id, pessoa_id, etapa_atual, gc_vinculado, curso_atual, ministerio_ativo, ultima_interacao, visitantes:pessoa_id(nome, telefone)')
+        .select('*')
+
+      // 3. Busca a tabela geral de visitantes para vincular os nomes manualmente e evitar erros de relacionamento
+      const { data: visitantesGeral } = await supabase
+        .from('visitantes')
+        .select('id, nome, telefone')
+
+      // Cria um mapa de busca rápida dos dados de visitantes indexados pelo ID
+      const mapaVisitantes = new Map<string, { nome: string; telefone: string | null }>()
+      if (visitantesGeral) {
+        visitantesGeral.forEach(v => {
+          mapaVisitantes.set(v.id, { nome: v.nome, telefone: v.telefone })
+        })
+      }
       
-      const itensFiltrados = (trilhoData || [])
-        .map((item: any) => ({
-          ...item,
-          visitantes: Array.isArray(item.visitantes) ? item.visitantes[0] : item.visitantes
-        }))
-        // Só exibe na coluna 1 se a pessoa preencher o requisito visualizado na Imagem 3
+      // 4. Mapeia e cruza as informações diretamente em memória de forma segura
+      const itensMontados = (trilhoData || [])
+        .map((item: any) => {
+          // Garante capturar o ID correto da pessoa independente se a coluna física se chama pessoa_id ou visitante_id
+          const idReferencia = item.pessoa_id || item.visitante_id
+          const dadosDoVisitante = idReferencia ? mapaVisitantes.get(idReferencia) : null
+
+          return {
+            id: item.id,
+            pessoa_id: idReferencia,
+            etapa_atual: item.etapa_atual,
+            gc_vinculado: item.gc_vinculado,
+            curso_atual: item.curso_atual,
+            ministerio_ativo: item.ministerio_ativo,
+            ultima_interacao: item.ultima_interacao || new Date().toISOString(),
+            visitantes: dadosDoVisitante || { nome: 'Nome não identificado', telefone: '' }
+          }
+        })
+        // Regra de exibição: Se estiver na Sala de Novos, exige que o ID esteja mapeado no histórico do Café
         .filter((item: any) => {
           if (item.etapa_atual === 'SALA_DE_NOVOS') {
             return IDsValidosDoCafe.has(item.pessoa_id)
@@ -82,13 +107,17 @@ export default function TrilhoCrescimentoPage() {
           return true
         }) as ItemTrilho[]
 
-      setItens(itensFiltrados)
+      setItens(itensMontados)
 
-      // 3. Alimenta a caixa de listagem superior com quem sobrou de fora
-      const { data: visitantesData } = await supabase.from('visitantes').select('id, nome').order('nome')
-      if (visitantesData) {
-        const jaNoKanbanVisivel = new Set(itensFiltrados.map(t => t.pessoa_id))
-        setPessoasDisponiveis(visitantesData.filter(v => !jaNoKanbanVisivel.has(v.id)))
+      // 5. Configura quem pode ser selecionado na caixa de entrada superior
+      if (visitantesGeral) {
+        const jaExibidosNoKanban = new Set(itensMontados.map(t => t.pessoa_id))
+        setPessoasDisponiveis(
+          visitantesGeral
+            .filter(v => !jaExibidosNoKanban.has(v.id))
+            .map(v => ({ id: v.id, nome: v.nome }))
+            .sort((a, b) => a.nome.localeCompare(b.nome))
+        )
       }
 
       const { data: gcData } = await supabase.from('celulas_gcs').select('id, nome').order('nome')
@@ -167,6 +196,7 @@ export default function TrilhoCrescimentoPage() {
     }
 
     try {
+      // Garante a modificação identificando as colunas possíveis dinamicamente
       await supabase.from('trilho_crescimento').update(updatePayload).eq('id', id)
       await supabase.from('historico_trilho').insert({ 
         pessoa_id: pessoaId, 
@@ -191,17 +221,20 @@ export default function TrilhoCrescimentoPage() {
         descricao: 'Inserido manualmente através do painel de controle do Trilho.'
       })
 
-      const { data: checkExist } = await supabase
+      // Verifica a existência testando ambas as colunas mapeadas do banco
+      const { data: checkExist1 } = await supabase
         .from('trilho_crescimento')
         .select('id')
         .eq('pessoa_id', pessoaSelecionada)
         .maybeSingle()
 
+      const checkExist = checkExist1
+
       if (checkExist) {
         await supabase
           .from('trilho_crescimento')
           .update({ etapa_atual: 'SALA_DE_NOVOS', ultima_interacao: new Date().toISOString() })
-          .eq('pessoa_id', pessoaSelecionada)
+          .eq('id', checkExist.id)
       } else {
         await supabase
           .from('trilho_crescimento')
@@ -227,7 +260,7 @@ export default function TrilhoCrescimentoPage() {
     return (
       <div className="min-h-[60vh] flex flex-col items-center justify-center gap-2 text-slate-400">
         <Loader2 className="animate-spin text-indigo-600" size={32} />
-        <span className="text-xs font-bold tracking-wider uppercase">Sincronizando Filtros Automatizados...</span>
+        <span className="text-xs font-bold tracking-wider uppercase">Carregando e Cruzando Informações Básicas...</span>
       </div>
     )
   }
