@@ -5,8 +5,7 @@ import Link from 'next/link'
 import { createClient } from '@supabase/supabase-js'
 import {
   Users, Clock, Heart, Coffee, CheckCircle2, Archive,
-  AlertTriangle, X, Loader2, ChevronDown, FileText, 
-  ArrowLeft, BarChart3
+  AlertTriangle, Loader2, FileText, ArrowLeft, Calendar
 } from 'lucide-react'
 
 const supabase = createClient(
@@ -50,7 +49,7 @@ export default function AcompanhamentoPage() {
   const [visitantes, setVisitantes] = useState<Visitante[]>([])
   const [followups, setFollowups] = useState<Followup[]>([])
   const [loading, setLoading] = useState(true)
-  const [periodo, setPeriodo] = useState('mes')
+  const [periodo, setPeriodo] = useState('30d') // Alterado padrão para 30d para evitar tela zerada na virada do mês
   const [mostrarRelatorio, setMostrarRelatorio] = useState(false)
 
   useEffect(() => { carregarDados() }, [])
@@ -67,25 +66,50 @@ export default function AcompanhamentoPage() {
     } catch (e) { console.error(e) } finally { setLoading(false) }
   }
 
+  // Lógica de período totalmente funcional contra o reset do dia 1º
   const visitorsFiltrados = useMemo(() => {
     const hoje = new Date()
-    hoje.setDate(1); hoje.setHours(0,0,0,0)
-    return visitantes.filter((v) => new Date(v.created_at) >= hoje)
-  }, [visitantes])
+    if (periodo === 'mes') {
+      hoje.setDate(1)
+      hoje.setHours(0, 0, 0, 0)
+      return visitantes.filter((v) => new Date(v.created_at) >= hoje)
+    } else if (periodo === '30d') {
+      const trintaDiasAtras = new Date()
+      trintaDiasAtras.setDate(trintaDiasAtras.getDate() - 30)
+      return visitantes.filter((v) => new Date(v.created_at) >= trintaDiasAtras)
+    }
+    return visitantes // 'todos'
+  }, [visitantes, periodo])
 
-  const pendentes = followups.filter((f) => f.status === 'pendente').length
-  const aguardando = followups.filter((f) => f.status === 'aguardando_resposta').length
-  const positivos = followups.filter((f) => f.status === 'resposta_positiva').length
-  const confirmadosCafe = followups.filter((f) => f.status === 'confirmado').length
-  const integrados = followups.filter((f) => f.status === 'integrated' || f.status === 'integrado').length
-  const arquivados = followups.filter((f) => f.status === 'arquivado').length
+  // Contadores normalizados com as nomenclaturas reais limpas do banco de dados (case-insensitive)
+  const pendentes = followups.filter((f) => String(f.status).toLowerCase().trim() === 'pendente').length
+  const aguardando = followups.filter((f) => String(f.status).toLowerCase().trim() === 'aguardando_resposta').length
+  const positivos = followups.filter((f) => String(f.status).toLowerCase().trim() === 'resposta_positiva').length
+  
+  // Quem respondeu positivamente ou confirmou presença na etapa de convite
+  const confirmadosCafe = followups.filter((f) => {
+    const st = String(f.status).toLowerCase().trim()
+    return st === 'confirmado' || st === 'confirmada'
+  }).length
+
+  // Modificado para capturar quem de fato deu "compareceu" na etapa do café (pilar do Trilho de Crescimento)
+  const integrados = followups.filter((f) => {
+    const st = String(f.status).toLowerCase().trim()
+    return st === 'compareceu' || st === 'concluido' || st === 'integrado'
+  }).length
+
+  const arquivados = followups.filter((f) => {
+    const st = String(f.status).toLowerCase().trim()
+    return st === 'arquivado' || st === 'nao_vira' || st === 'nao_compareceu'
+  }).length
+
   const semContato = followups.filter((f) => !f.data_contato).length
 
   if (loading) {
     return (
       <div className="min-h-[60vh] flex flex-col items-center justify-center gap-2 text-slate-400">
         <Loader2 className="animate-spin text-blue-600" size={32} />
-        <span className="text-xs font-bold tracking-wider uppercase">Carregando Acompanhamento...</span>
+        <span className="text-xs font-bold tracking-wider uppercase">Sincronizando Métricas da Dashboard...</span>
       </div>
     )
   }
@@ -95,7 +119,6 @@ export default function AcompanhamentoPage() {
       <div className={mostrarRelatorio ? 'print:hidden' : ''}>
         <div className="max-w-7xl mx-auto space-y-6 p-4 sm:p-6 lg:p-8">
           
-          {/* Botão de Voltar para a Dashboard Principal */}
           <div>
             <Link href="/dashboard" className="inline-flex items-center gap-2 text-xs font-bold text-slate-500 hover:text-blue-600 transition">
               <ArrowLeft size={14} /> Voltar ao Painel Geral
@@ -105,7 +128,6 @@ export default function AcompanhamentoPage() {
           <div className="border-b border-slate-200 pb-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
               <h1 className="text-3xl font-black text-slate-900 flex items-center gap-3 tracking-tight">
-                {/* ÍCONE ATUALIZADO PARA COMPATIBILIDADE VISUAL */}
                 <div className="bg-blue-600 p-2 rounded-2xl text-white shadow-sm">
                   <Users size={24} />
                 </div>
@@ -116,8 +138,21 @@ export default function AcompanhamentoPage() {
               </p>
             </div>
 
-            {/* Ações da Dashboard */}
-            <div className="flex gap-2">
+            {/* Filtros e Ações da Dashboard */}
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-2 bg-white border border-slate-200 px-3 py-2 rounded-xl shadow-xs">
+                <Calendar size={14} className="text-slate-400" />
+                <select
+                  value={periodo}
+                  onChange={(e) => setPeriodo(e.target.value)}
+                  className="text-xs font-bold text-slate-700 bg-transparent focus:outline-none cursor-pointer"
+                >
+                  <option value="30d">Últimos 30 dias (Recomendado)</option>
+                  <option value="mes">Este Mês Atual</option>
+                  <option value="todos">Histórico Completo</option>
+                </select>
+              </div>
+
               <Link 
                 href="/dashboard/cafe-convites" 
                 className="bg-amber-500 hover:bg-amber-600 text-white px-4 py-2.5 rounded-xl text-xs font-extrabold flex items-center gap-2 shadow-sm transition"
@@ -141,9 +176,9 @@ export default function AcompanhamentoPage() {
             <Card titulo="Aguardando resposta" valor={aguardando} icon={Clock} />
             <Card titulo="Resposta positiva" valor={positivos} icon={Heart} variant="success" />
             <Card titulo="Confirmados Café" valor={confirmadosCafe} icon={Coffee} variant="info" />
-            <Card titulo="Integrados" valor={integrados} icon={CheckCircle2} variant="success" />
-            <Card titulo="Arquivados" valor={arquivados} icon={Archive} />
-            <Card titulo="Sem contato +7 dias" valor={semContato} icon={AlertTriangle} variant="danger" />
+            <Card titulo="Compareceram / Integrados" valor={integrados} icon={CheckCircle2} variant="success" />
+            <Card titulo="Arquivados / Recusas" valor={arquivados} icon={Archive} />
+            <Card titulo="Sem contato gravado" valor={semContato} icon={AlertTriangle} variant="danger" />
           </div>
         </div>
       </div>
