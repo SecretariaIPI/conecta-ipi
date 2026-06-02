@@ -65,64 +65,44 @@ const ETAPAS = [
 
 const STATUS_POR_ETAPA: Record<string, string[]> = {
   primeiro_contato: [
-    'pendente',
+    'nao_realizado',
     'realizado',
-    'resposta_positiva',
-    'arquivado'
+    'resposta_positiva'
   ],
   segundo_contato: [
-    'pendente',
+    'nao_realizado',
     'realizado',
-    'resposta_positiva',
-    'arquivado'
+    'resposta_positiva'
   ],
   intercessao: [
-    'pendente',
-    'em_oracao',
-    'concluido'
+    'nao_realizado',
+    'resposta_positiva'
   ],
   convite_cafe: [
-    'pendente',
-    'convite_enviado',
-    'confirmado',
-    'nao_vira'
+    'nao_realizado',
+    'realizado',
+    'resposta_positiva'
   ],
   pos_cafe: [
     'compareceu',
-    'nao_compareceu',
-    'integrado',
-    'arquivado'
+    'nao_compareceu'
   ]
 }
 
 const STATUS_LABELS: Record<string, string> = {
-  pendente: 'Pendente',
+  nao_realizado: 'Não Realizado',
   realizado: 'Realizado',
   resposta_positiva: 'Resposta Positiva',
-  arquivado: 'Arquivado',
-  em_oracao: 'Em Oração',
-  concluido: 'Concluído',
-  convite_enviado: 'Convite Enviado',
-  confirmado: 'Confirmado',
-  nao_vira: 'Não Virá',
   compareceu: 'Compareceu',
-  nao_compareceu: 'Não Compareceu',
-  integrado: 'Integrado'
+  nao_compareceu: 'Não Compareceu'
 }
 
 const STATUS_CLASSES: Record<string, string> = {
-  pendente: 'bg-blue-50 text-blue-700',
-  realizado: 'bg-amber-50 text-amber-700',      // Mantido em amarelo para o novo status
+  nao_realizado: 'bg-red-50 text-red-700',
+  realizado: 'bg-amber-50 text-amber-700',
   resposta_positiva: 'bg-emerald-50 text-emerald-700',
-  arquivado: 'bg-rose-50 text-rose-700',
-  em_oracao: 'bg-purple-50 text-purple-700',
-  concluido: 'bg-emerald-50 text-emerald-700',
-  convite_enviado: 'bg-cyan-50 text-cyan-700',
-  confirmado: 'bg-green-50 text-green-700',
-  nao_vira: 'bg-red-50 text-red-700',
-  compareceu: 'bg-teal-50 text-teal-700',
-  nao_compareceu: 'bg-slate-100 text-slate-700',
-  integrado: 'bg-indigo-50 text-indigo-700'
+  compareceu: 'bg-emerald-50 text-emerald-700',
+  nao_compareceu: 'bg-red-50 text-red-700'
 }
 
 function traduzirEtapa(etapa: string) {
@@ -343,7 +323,7 @@ export default function FichaVisitantePage() {
             {ETAPAS.map((etapa) => {
               const statusAtual =
                 followups.find((item) => item.etapa === etapa)?.status ||
-                'pendente'
+                'nao_realizado'
 
               const historicoEtapa = timeline.filter(
                 (item) =>
@@ -450,265 +430,9 @@ export default function FichaVisitantePage() {
                 </div>
               )
             })}
-
-            <ChecklistIntegracaoComponent 
-              visitanteId={id} 
-              onUpdate={carregarDados} 
-              responsavel={responsavelDaEtapa('checklist_integracao')} 
-            />
-          </div>
-
-          <div>
-            <div className="bg-white rounded-3xl p-6 border border-slate-200/60 shadow-sm sticky top-8 max-h-[85vh] overflow-y-auto">
-              <h2 className="text-xl font-bold text-slate-900 mb-6 flex gap-2 items-center border-b pb-4">
-                <Clock className="text-slate-400" size={20} />
-                Histórico de Ações Geral
-              </h2>
-
-              <div className="space-y-4">
-                {timeline.map((item) => (
-                  <div key={item.id} className="border border-slate-100 rounded-2xl p-4 bg-slate-50/50">
-                    <div className="font-bold text-slate-800 text-sm">
-                      {traduzirEtapa(item.etapa)}
-                    </div>
-
-                    <div className="text-[11px] text-slate-400 mt-0.5 font-medium">
-                      {item.criado_por} •{' '}
-                      {new Date(item.created_at).toLocaleString('pt-BR')}
-                    </div>
-
-                    <div className="mt-2.5 text-xs text-slate-600 whitespace-pre-line leading-relaxed">
-                      {item.observacao}
-                    </div>
-                  </div>
-                ))}
-                {timeline.length === 0 && (
-                  <div className="text-center py-8 text-xs font-medium text-slate-400">
-                    Nenhuma movimentação registrada.
-                  </div>
-                )}
-              </div>
-            </div>
           </div>
         </div>
       </div>
-    </div>
-  )
-}
-
-function ChecklistIntegracaoComponent({ 
-  visitanteId, 
-  onUpdate, 
-  responsavel 
-}: { 
-  visitanteId: string; 
-  onUpdate: () => Promise<void>; 
-  responsavel: string 
-}) {
-  const [loading, setLoading] = useState(true)
-  const [checklist, setChecklist] = useState<Record<string, boolean>>({
-    aceitou_jesus: false, acompanhamento_pastoral: false, pedido_oracao: false,
-    participa_culto: false, participa_gc: false, integrado_gc: false,
-    participou_cafe: false, novos_membros: false, material_recebido: false,
-    batizado: false, membro: false, transferencia: false,
-    interest_servir: false, encaminhado_ministerio: false, integrado_ministerio: false
-  })
-
-  useEffect(() => {
-    async function carregarChecklist() {
-      try {
-        const { data: dadosIniciais, error } = await supabase
-          .from('visitantes_checklist')
-          .select('*')
-          .eq('visitante_id', visitanteId)
-          .single()
-
-        let data = dadosIniciais
-
-        if (error && error.code === 'PGRST116') {
-          const { data: newData, error: createError } = await supabase
-            .from('visitantes_checklist')
-            .insert([{ visitante_id: visitanteId }])
-            .select()
-            .single()
-          
-          if (!createError && newData) data = newData
-        }
-
-        if (data) {
-          const { id: _id, visitante_id: _vId, updated_at: _uAt, ...estados } = data
-          setChecklist(estados)
-        }
-      } catch (err) {
-        console.error('Erro ao ler checklist:', err)
-      } finally {
-        setLoading(false)
-      }
-    }
-    carregarChecklist()
-  }, [visitanteId])
-
-  const handleToggle = async (campo: string, label: string) => {
-    const novoValor = !checklist[campo]
-    
-    setChecklist(prev => ({ ...prev, [campo]: novoValor }))
-
-    try {
-      const { error: checklistError } = await supabase
-        .from('visitantes_checklist')
-        .update({ [campo]: novoValor, updated_at: new Date().toISOString() })
-        .eq('visitante_id', visitanteId)
-
-      if (checklistError) {
-        console.error('Erro ao salvar no banco:', checklistError.message)
-        alert('Não foi possível registrar o passo no banco: ' + checklistError.message)
-        setChecklist(prev => ({ ...prev, [campo]: !novoValor }))
-        return
-      }
-
-      await supabase.from('visitantes_timeline').insert([
-        {
-          visitante_id: visitanteId,
-          etapa: 'checklist_integracao',
-          status: 'registro',
-          observacao: novoValor ? `✓ Mapeado: ${label}` : `✕ Removido: ${label}`,
-          criado_por: responsavel
-        }
-      ])
-
-      await onUpdate()
-    } catch (err) {
-      console.error('Erro crítico ao salvar item do checklist:', err)
-      setChecklist(prev => ({ ...prev, [campo]: !novoValor }))
-    }
-  }
-
-  const totalItens = Object.keys(checklist).length
-  const itensConcluidos = Object.values(checklist).filter(Boolean).length
-  const porcentagem = Math.round((itensConcluidos / totalItens) * 100)
-
-  if (loading) return <div className="bg-white rounded-3xl p-6 border text-slate-400 text-sm animate-pulse">Carregando jornada de integração...</div>
-
-  const secoes = [
-    {
-      titulo: 'Vida Espiritual',
-      cor: 'text-rose-500',
-      bg: 'bg-rose-50',
-      icon: Heart,
-      itens: [
-        { campo: 'aceitou_jesus', label: 'Aceitou Jesus' },
-        { campo: 'acompanhamento_pastoral', label: 'Recebe acompanhamento pastoral' },
-        { campo: 'pedido_oracao', label: 'Pedido de oração ativo' },
-      ]
-    },
-    {
-      titulo: 'Comunhão',
-      cor: 'text-blue-500',
-      bg: 'bg-blue-50',
-      icon: UsersIcon,
-      itens: [
-        { campo: 'participa_culto', label: 'Participa de culto regularmente' },
-        { campo: 'participa_gc', label: 'Participa de GC (Grupo de Crescimento)' },
-        { campo: 'integrado_gc', label: 'Integrado em GC fixo' },
-      ]
-    },
-    {
-      titulo: 'Formação',
-      cor: 'text-amber-500',
-      bg: 'bg-amber-50',
-      icon: BookOpen,
-      itens: [
-        { campo: 'participou_cafe', label: 'Participou Café de Integração' },
-        { campo: 'novos_membros', label: 'Concluiu classe de novos membros' },
-        { campo: 'material_recebido', label: 'Recebeu material da igreja' },
-      ]
-    },
-    {
-      titulo: 'Sacramentos / Membresia',
-      cor: 'text-purple-500',
-      bg: 'bg-purple-50',
-      icon: ShieldCheck,
-      itens: [
-        { campo: 'batizado', label: 'Batizado' },
-        { campo: 'membro', label: 'Recebido como membro' },
-        { campo: 'transferencia', label: 'Transferência de membresia' },
-      ]
-    },
-    {
-      titulo: 'Serviço',
-      cor: 'text-emerald-500',
-      bg: 'bg-emerald-50',
-      icon: Sparkles,
-      itens: [
-        { campo: 'interesse_servir', label: 'Interesse em servir' },
-        { campo: 'encaminhado_ministerio', label: 'Encaminhado para ministério' },
-        { campo: 'integrado_ministerio', label: 'Integrado em ministério' },
-      ]
-    }
-  ]
-
-  return (
-    <div className="bg-white rounded-3xl p-6 border border-slate-200/60 shadow-sm space-y-6">
-      <div className="space-y-2">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-          <div>
-            <h2 className="text-2xl font-bold flex items-center gap-2 text-slate-800">
-              <CheckCircle2 className="text-blue-600" size={24} /> Checklist de Integração
-            </h2>
-            <p className="text-slate-500 text-sm mt-1">Acompanhamento dos passos ministeriais do novo membro.</p>
-          </div>
-          <span className="text-xs font-bold text-blue-700 bg-blue-50 border border-blue-100 px-3 py-1.5 rounded-xl self-start sm:self-auto uppercase tracking-wider">
-            Progresso: {porcentagem}%
-          </span>
-        </div>
-        
-        <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
-          <div 
-            className="bg-gradient-to-r from-blue-500 to-emerald-500 h-full transition-all duration-500 ease-out"
-            style={{ width: `${porcentagem}%` }}
-          />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {secoes.map((secao) => {
-          const IconeSecao = secao.icon
-          return (
-            <div key={secao.titulo} className="border border-slate-100 rounded-2xl p-4 bg-slate-50/40 space-y-3">
-              <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
-                <div className={`p-1.5 rounded-lg ${secao.bg} ${secao.cor}`}>
-                  <IconeSecao size={14} />
-                </div>
-                <h4 className="text-sm font-bold text-slate-800">{secao.titulo}</h4>
-              </div>
-
-              <div className="space-y-2.5">
-                {secao.itens.map((item) => (
-                  <label 
-                    key={item.campo} 
-                    className="flex items-start gap-3 text-xs text-slate-600 cursor-pointer select-none hover:text-slate-900 transition font-medium"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={checklist[item.campo] || false}
-                      onChange={() => handleToggle(item.campo, item.label)}
-                      className="mt-0.5 w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                    />
-                    <span>{item.label}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-          )
-        })}
-      </div>
-
-      {porcentagem === 100 && (
-        <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 flex items-center gap-3 text-emerald-800 text-sm font-semibold">
-          <Award className="text-emerald-600 shrink-0" size={24} />
-          <span>Parabéns! Este irmão concluiu 100% da jornada de integração e está estabelecido no corpo local!</span>
-        </div>
-      )}
     </div>
   )
 }
