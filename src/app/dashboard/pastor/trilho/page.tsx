@@ -47,13 +47,12 @@ export default function TrilhoCrescimentoPage() {
     try {
       setLoading(true)
       
-      // 1. Busca os registros do histórico de acompanhamento do café
+      // 1. Busca ampla no acompanhamento: Filtra apenas pelo status de sucesso (independente do nome exato da etapa)
       const { data: followupData } = await supabase
         .from('visitantes_followup')
-        .select('pessoa_id, status')
-        .or('etapa.eq.convite_cafe,etapa.eq.cafe')
+        .select('pessoa_id, status, etapa')
 
-      // Filtra os IDs das pessoas confirmadas com o status correto do seu formulário
+      // Mapeia quem compareceu ou concluiu com segurança contra strings variantes
       const IDsValidosDoCafe = new Set(
         (followupData || [])
           .filter(f => {
@@ -63,17 +62,16 @@ export default function TrilhoCrescimentoPage() {
           .map(f => f.pessoa_id)
       )
       
-      // 2. Busca todas as linhas puras da tabela do trilho de crescimento
+      // 2. Busca linhas físicas existentes no Kanban
       const { data: trilhoData } = await supabase
         .from('trilho_crescimento')
         .select('*')
 
-      // 3. Busca a tabela geral de visitantes para vincular os nomes manualmente e evitar erros de relacionamento
+      // 3. Busca lista global de pessoas (visitantes)
       const { data: visitantesGeral } = await supabase
         .from('visitantes')
         .select('id, nome, telefone')
 
-      // Cria um mapa de busca rápida dos dados de visitantes indexados pelo ID
       const mapaVisitantes = new Map<string, { nome: string; telefone: string | null }>()
       if (visitantesGeral) {
         visitantesGeral.forEach(v => {
@@ -81,40 +79,66 @@ export default function TrilhoCrescimentoPage() {
         })
       }
       
-      // 4. Mapeia e cruza as informações diretamente em memória de forma segura
-      const itensMontados = (trilhoData || [])
+      // Lista de controle para evitar duplicar itens na renderização em memória
+      const mapeadosNoTrilho = new Set<string>()
+
+      // 4. Monta os itens que já possuem registro físico no banco
+      const itensExistentes = (trilhoData || [])
         .map((item: any) => {
-          // Garante capturar o ID correto da pessoa independente se a coluna física se chama pessoa_id ou visitante_id
           const idReferencia = item.pessoa_id || item.visitante_id
+          if (idReferencia) mapeadosNoTrilho.add(idReferencia)
+          
           const dadosDoVisitante = idReferencia ? mapaVisitantes.get(idReferencia) : null
 
           return {
             id: item.id,
             pessoa_id: idReferencia,
-            etapa_atual: item.etapa_atual,
-            gc_vinculado: item.gc_vinculado,
-            curso_atual: item.curso_atual,
-            ministerio_ativo: item.ministerio_ativo,
+            etapa_atual: item.etapa_atual || 'SALA_DE_NOVOS',
+            gc_vinculado: item.gc_vinculado || null,
+            curso_atual: item.curso_atual || null,
+            ministerio_ativo: item.ministerio_ativo || null,
             ultima_interacao: item.ultima_interacao || new Date().toISOString(),
-            visitantes: dadosDoVisitante || { nome: 'Nome não identificado', telefone: '' }
+            visitantes: dadosDoVisitante || { nome: 'Membro Geral', telefone: '' }
           }
         })
-        // Regra de exibição: Se estiver na Sala de Novos, exige que o ID esteja mapeado no histórico do Café
-        .filter((item: any) => {
-          if (item.etapa_atual === 'SALA_DE_NOVOS') {
-            return IDsValidosDoCafe.has(item.pessoa_id)
+
+      // 5. INJEÇÃO DE SEGURANÇA VIRTUAL: Se a pessoa deu COMPARECEU mas não tem linha na tabela `trilho_crescimento`,
+      // nós criamos o card em memória dinamicamente para ela não sumir do painel de controle
+      const itensInjetados: ItemTrilho[] = []
+      IDsValidosDoCafe.forEach(idDaPessoa => {
+        if (!mapeadosNoTrilho.has(idDaPessoa)) {
+          const dadosDoVisitante = mapaVisitantes.get(idDaPessoa)
+          if (dadosDoVisitante) {
+            itensInjetados.push({
+              id: `virtual-${idDaPessoa}`, // ID provisório até ser movido de coluna
+              pessoa_id: idDaPessoa,
+              etapa_atual: 'SALA_DE_NOVOS',
+              gc_vinculado: null,
+              curso_atual: null,
+              ministerio_ativo: null,
+              ultima_interacao: new Date().toISOString(),
+              visitantes: dadosDoVisitante
+            })
           }
-          return true
-        }) as ItemTrilho[]
+        }
+      })
 
-      setItens(itensMontados)
+      // Une as duas fontes e aplica o filtro visual final
+      const todosOsItens = [...itensExistentes, ...itensInjetados].filter((item: any) => {
+        if (item.etapa_atual === 'SALA_DE_NOVOS') {
+          return IDsValidosDoCafe.has(item.pessoa_id)
+        }
+        return true
+      })
 
-      // 5. Configura quem pode ser selecionado na caixa de entrada superior
+      setItens(todosOsItens)
+
+      // 6. Alimenta o dropdown superior excluindo quem já está visível
       if (visitantesGeral) {
-        const jaExibidosNoKanban = new Set(itensMontados.map(t => t.pessoa_id))
+        const jaVisiveis = new Set(todosOsItens.map(t => t.pessoa_id))
         setPessoasDisponiveis(
           visitantesGeral
-            .filter(v => !jaExibidosNoKanban.has(v.id))
+            .filter(v => !jaVisiveis.has(v.id))
             .map(v => ({ id: v.id, nome: v.nome }))
             .sort((a, b) => a.nome.localeCompare(b.nome))
         )
@@ -138,6 +162,10 @@ export default function TrilhoCrescimentoPage() {
   }, [])
 
   async function abrirModalNotas(item: ItemTrilho) {
+    if (item.id.startsWith('virtual-')) {
+      alert('Gere uma movimentação ou salve uma nota para consolidar este registro no banco primeiro!')
+      return
+    }
     setTrilhoFoco(item)
     setNovaNotaTexto('')
     const { data } = await supabase
@@ -196,8 +224,16 @@ export default function TrilhoCrescimentoPage() {
     }
 
     try {
-      // Garante a modificação identificando as colunas possíveis dinamicamente
-      await supabase.from('trilho_crescimento').update(updatePayload).eq('id', id)
+      // Se for um item virtual, cria o registro físico no momento do avanço
+      if (id.startsWith('virtual-')) {
+        await supabase.from('trilho_crescimento').insert({
+          pessoa_id: pessoaId,
+          ...updatePayload
+        })
+      } else {
+        await supabase.from('trilho_crescimento').update(updatePayload).eq('id', id)
+      }
+
       await supabase.from('historico_trilho').insert({ 
         pessoa_id: pessoaId, 
         etapa_anterior: etapaAtual, 
@@ -221,14 +257,11 @@ export default function TrilhoCrescimentoPage() {
         descricao: 'Inserido manualmente através do painel de controle do Trilho.'
       })
 
-      // Verifica a existência testando ambas as colunas mapeadas do banco
-      const { data: checkExist1 } = await supabase
+      const { data: checkExist } = await supabase
         .from('trilho_crescimento')
         .select('id')
         .eq('pessoa_id', pessoaSelecionada)
         .maybeSingle()
-
-      const checkExist = checkExist1
 
       if (checkExist) {
         await supabase
@@ -260,7 +293,7 @@ export default function TrilhoCrescimentoPage() {
     return (
       <div className="min-h-[60vh] flex flex-col items-center justify-center gap-2 text-slate-400">
         <Loader2 className="animate-spin text-indigo-600" size={32} />
-        <span className="text-xs font-bold tracking-wider uppercase">Carregando e Cruzando Informações Básicas...</span>
+        <span className="text-xs font-bold tracking-wider uppercase">Forçando Injeção de Segurança e Atualizando Cards...</span>
       </div>
     )
   }
