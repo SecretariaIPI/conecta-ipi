@@ -47,17 +47,24 @@ export default function TrilhoCrescimentoPage() {
     try {
       setLoading(true)
       
-      // 1. FLEXIBILIZAÇÃO DO FILTRO: Puxa qualquer registro de café/convite_cafe 
-      // removendo a trava de status obrigatório 'concluido', para garantir que seus 4 de março apareçam
+      // 1. MAPEAMENTO EXATO: O Supabase agora busca registros onde a etapa envolva 'cafe'
+      // independente se foi gravado como 'COMPARECEU', 'realizado' ou 'concluido'
       const { data: followupData } = await supabase
         .from('visitantes_followup')
-        .select('pessoa_id, status, etapa')
+        .select('pessoa_id, status')
         .or('etapa.eq.convite_cafe,etapa.eq.cafe')
 
-      // Cria o conjunto de IDs válidos (aceita qualquer interação iniciada ou concluída do café)
-      const IDsValidosDoCafe = new Set(followupData?.map(f => f.pessoa_id) || [])
+      // Filtra os IDs garantindo compatibilidade com maiúsculas/minúsculas vindas do formulário da imagem 3
+      const IDsValidosDoCafe = new Set(
+        (followupData || [])
+          .filter(f => {
+            const st = String(f.status || '').toLowerCase().trim()
+            return st === 'compareceu' || st === 'concluido' || st === 'realizado' || st === 'resposta positiva'
+          })
+          .map(f => f.pessoa_id)
+      )
       
-      // 2. Busca as linhas cadastradas no trilho
+      // 2. Carrega as linhas estruturadas do Trilho
       const { data: trilhoData } = await supabase
         .from('trilho_crescimento')
         .select('id, pessoa_id, etapa_atual, gc_vinculado, curso_atual, ministerio_ativo, ultima_interacao, visitantes:pessoa_id(nome, telefone)')
@@ -67,7 +74,7 @@ export default function TrilhoCrescimentoPage() {
           ...item,
           visitantes: Array.isArray(item.visitantes) ? item.visitantes[0] : item.visitantes
         }))
-        // Filtra a primeira coluna garantindo que os 4 com histórico apareçam, mas barra os 53 puros
+        // Só exibe na coluna 1 se a pessoa preencher o requisito visualizado na Imagem 3
         .filter((item: any) => {
           if (item.etapa_atual === 'SALA_DE_NOVOS') {
             return IDsValidosDoCafe.has(item.pessoa_id)
@@ -77,7 +84,7 @@ export default function TrilhoCrescimentoPage() {
 
       setItens(itensFiltrados)
 
-      // 3. Atualiza o seletor de novos membros escondendo quem já está visível
+      // 3. Alimenta a caixa de listagem superior com quem sobrou de fora
       const { data: visitantesData } = await supabase.from('visitantes').select('id, nome').order('nome')
       if (visitantesData) {
         const jaNoKanbanVisivel = new Set(itensFiltrados.map(t => t.pessoa_id))
@@ -91,7 +98,7 @@ export default function TrilhoCrescimentoPage() {
       setMinisteriosDisponiveis(minData || [])
 
     } catch (err) {
-      console.error('Erro ao processar fluxo do Kanban:', err)
+      console.error('Erro na sincronização de dados do Trilho:', err)
     } finally {
       setLoading(false)
     }
@@ -180,7 +187,7 @@ export default function TrilhoCrescimentoPage() {
       await supabase.from('visitantes_followup').insert({
         pessoa_id: pessoaSelecionada,
         etapa: 'cafe',
-        status: 'realizado',
+        status: 'COMPARECEU',
         descricao: 'Inserido manualmente através do painel de controle do Trilho.'
       })
 
@@ -220,7 +227,7 @@ export default function TrilhoCrescimentoPage() {
     return (
       <div className="min-h-[60vh] flex flex-col items-center justify-center gap-2 text-slate-400">
         <Loader2 className="animate-spin text-indigo-600" size={32} />
-        <span className="text-xs font-bold tracking-wider uppercase">Carregando Fluxos de Consolidação...</span>
+        <span className="text-xs font-bold tracking-wider uppercase">Sincronizando Filtros Automatizados...</span>
       </div>
     )
   }
