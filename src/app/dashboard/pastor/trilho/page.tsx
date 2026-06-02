@@ -47,17 +47,17 @@ export default function TrilhoCrescimentoPage() {
     try {
       setLoading(true)
       
-      // 1. Busca os históricos de atendimento para validar quem de fato concluiu o convite ou o Café
+      // 1. FLEXIBILIZAÇÃO DO FILTRO: Puxa qualquer registro de café/convite_cafe 
+      // removendo a trava de status obrigatório 'concluido', para garantir que seus 4 de março apareçam
       const { data: followupData } = await supabase
         .from('visitantes_followup')
-        .select('pessoa_id')
+        .select('pessoa_id, status, etapa')
         .or('etapa.eq.convite_cafe,etapa.eq.cafe')
-        .or('status.eq.concluido,status.eq.realizado')
 
-      // Cria um conjunto de IDs de pessoas que REALMENTE passaram pelo café de forma válida
+      // Cria o conjunto de IDs válidos (aceita qualquer interação iniciada ou concluída do café)
       const IDsValidosDoCafe = new Set(followupData?.map(f => f.pessoa_id) || [])
       
-      // 2. Busca todas as linhas da tabela de trilho
+      // 2. Busca as linhas cadastradas no trilho
       const { data: trilhoData } = await supabase
         .from('trilho_crescimento')
         .select('id, pessoa_id, etapa_atual, gc_vinculado, curso_atual, ministerio_ativo, ultima_interacao, visitantes:pessoa_id(nome, telefone)')
@@ -67,17 +67,17 @@ export default function TrilhoCrescimentoPage() {
           ...item,
           visitantes: Array.isArray(item.visitantes) ? item.visitantes[0] : item.visitantes
         }))
-        // FILTRAGEM DO KANBAN: Só exibe o card na "Sala de Novos" se o visitante possuir o histórico confirmado de Café
+        // Filtra a primeira coluna garantindo que os 4 com histórico apareçam, mas barra os 53 puros
         .filter((item: any) => {
           if (item.etapa_atual === 'SALA_DE_NOVOS') {
             return IDsValidosDoCafe.has(item.pessoa_id)
           }
-          return true // Mantém intocados quem já avançou para as fases 2, 3 ou 4
+          return true
         }) as ItemTrilho[]
 
       setItens(itensFiltrados)
 
-      // 3. O seletor de adição exibe quem NÃO está listado ativamente no Kanban
+      // 3. Atualiza o seletor de novos membros escondendo quem já está visível
       const { data: visitantesData } = await supabase.from('visitantes').select('id, nome').order('nome')
       if (visitantesData) {
         const jaNoKanbanVisivel = new Set(itensFiltrados.map(t => t.pessoa_id))
@@ -177,12 +177,10 @@ export default function TrilhoCrescimentoPage() {
     if (!pessoaSelecionada) return
     try {
       setInserindo(true)
-      // Como o Kanban agora filtra rigorosamente por histórico de atendimento,
-      // ao forçar a entrada de alguém manualmente pelo botão "+", nós garantimos que um registro de validação exista
       await supabase.from('visitantes_followup').insert({
         pessoa_id: pessoaSelecionada,
         etapa: 'cafe',
-        status: 'concluido',
+        status: 'realizado',
         descricao: 'Inserido manualmente através do painel de controle do Trilho.'
       })
 
