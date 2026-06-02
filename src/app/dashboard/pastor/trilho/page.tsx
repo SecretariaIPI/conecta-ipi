@@ -15,7 +15,7 @@ const supabase = createClient(
 
 interface ItemTrilho {
   id: string
-  pessoa_id: string
+  visitante_id: string
   etapa_atual: 'SALA_DE_NOVOS' | 'BATISMO_RECEBIMENTO' | 'FASE_2_ENGAJAMENTO' | 'FASE_3_MINISTERIO'
   gc_vinculado: string | null
   curso_atual: string | null
@@ -47,19 +47,20 @@ export default function TrilhoCrescimentoPage() {
     try {
       setLoading(true)
       
-      // 1. Busca ampla no acompanhamento: Filtra apenas pelo status de sucesso (independente do nome exato da etapa)
+      // 1. Busca usando as colunas corretas (visitante_id)
       const { data: followupData } = await supabase
         .from('visitantes_followup')
-        .select('pessoa_id, status, etapa')
+        .select('visitante_id, status, etapa')
 
-      // Mapeia quem compareceu ou concluiu com segurança contra strings variantes
+      // Mapeia QUEM REALMENTE FOI AO CAFÉ baseado nas colunas reais do banco de dados
       const IDsValidosDoCafe = new Set(
         (followupData || [])
           .filter(f => {
-            const st = String(f.status || '').toLowerCase().trim()
-            return st === 'compareceu' || st === 'concluido' || st === 'realizado' || st === 'resposta positiva'
+            const etapaBd = String(f.etapa || '').toLowerCase().trim()
+            const statusBd = String(f.status || '').toLowerCase().trim()
+            return etapaBd === 'pos_cafe' && statusBd === 'compareceu'
           })
-          .map(f => f.pessoa_id)
+          .map(f => f.visitante_id) // Alterado de pessoa_id para visitante_id
       )
       
       // 2. Busca linhas físicas existentes no Kanban
@@ -79,20 +80,20 @@ export default function TrilhoCrescimentoPage() {
         })
       }
       
-      // Lista de controle para evitar duplicar itens na renderização em memória
       const mapeadosNoTrilho = new Set<string>()
 
       // 4. Monta os itens que já possuem registro físico no banco
       const itensExistentes = (trilhoData || [])
         .map((item: any) => {
-          const idReferencia = item.pessoa_id || item.visitante_id
+          // Garante a leitura correta caso a tabela do trilho também use visitante_id
+          const idReferencia = item.visitante_id || item.pessoa_id 
           if (idReferencia) mapeadosNoTrilho.add(idReferencia)
           
           const dadosDoVisitante = idReferencia ? mapaVisitantes.get(idReferencia) : null
 
           return {
             id: item.id,
-            pessoa_id: idReferencia,
+            visitante_id: idReferencia,
             etapa_atual: item.etapa_atual || 'SALA_DE_NOVOS',
             gc_vinculado: item.gc_vinculado || null,
             curso_atual: item.curso_atual || null,
@@ -102,16 +103,15 @@ export default function TrilhoCrescimentoPage() {
           }
         })
 
-      // 5. INJEÇÃO DE SEGURANÇA VIRTUAL: Se a pessoa deu COMPARECEU mas não tem linha na tabela `trilho_crescimento`,
-      // nós criamos o card em memória dinamicamente para ela não sumir do painel de controle
+      // 5. INJEÇÃO DE SEGURANÇA VIRTUAL
       const itensInjetados: ItemTrilho[] = []
       IDsValidosDoCafe.forEach(idDaPessoa => {
         if (!mapeadosNoTrilho.has(idDaPessoa)) {
           const dadosDoVisitante = mapaVisitantes.get(idDaPessoa)
           if (dadosDoVisitante) {
             itensInjetados.push({
-              id: `virtual-${idDaPessoa}`, // ID provisório até ser movido de coluna
-              pessoa_id: idDaPessoa,
+              id: `virtual-${idDaPessoa}`,
+              visitante_id: idDaPessoa,
               etapa_atual: 'SALA_DE_NOVOS',
               gc_vinculado: null,
               curso_atual: null,
@@ -123,10 +123,10 @@ export default function TrilhoCrescimentoPage() {
         }
       })
 
-      // Une as duas fontes e aplica o filtro visual final
+      // Une as duas fontes e aplica o filtro
       const todosOsItens = [...itensExistentes, ...itensInjetados].filter((item: any) => {
         if (item.etapa_atual === 'SALA_DE_NOVOS') {
-          return IDsValidosDoCafe.has(item.pessoa_id)
+          return IDsValidosDoCafe.has(item.visitante_id)
         }
         return true
       })
@@ -135,7 +135,7 @@ export default function TrilhoCrescimentoPage() {
 
       // 6. Alimenta o dropdown superior excluindo quem já está visível
       if (visitantesGeral) {
-        const jaVisiveis = new Set(todosOsItens.map(t => t.pessoa_id))
+        const jaVisiveis = new Set(todosOsItens.map(t => t.visitante_id))
         setPessoasDisponiveis(
           visitantesGeral
             .filter(v => !jaVisiveis.has(v.id))
@@ -204,7 +204,7 @@ export default function TrilhoCrescimentoPage() {
     }
   }
 
-  async function moverEtapa(id: string, etapaAtual: string, pessoaId: string) {
+  async function moverEtapa(id: string, etapaAtual: string, visitanteId: string) {
     const etapas: ItemTrilho['etapa_atual'][] = ['SALA_DE_NOVOS', 'BATISMO_RECEBIMENTO', 'FASE_2_ENGAJAMENTO', 'FASE_3_MINISTERIO']
     const idx = etapas.indexOf(etapaAtual as any)
     if (idx === -1 || idx === etapas.length - 1) return
@@ -224,10 +224,9 @@ export default function TrilhoCrescimentoPage() {
     }
 
     try {
-      // Se for um item virtual, cria o registro físico no momento do avanço
       if (id.startsWith('virtual-')) {
         await supabase.from('trilho_crescimento').insert({
-          pessoa_id: pessoaId,
+          visitante_id: visitanteId, // Coluna corrigida
           ...updatePayload
         })
       } else {
@@ -235,7 +234,7 @@ export default function TrilhoCrescimentoPage() {
       }
 
       await supabase.from('historico_trilho').insert({ 
-        pessoa_id: pessoaId, 
+        visitante_id: visitanteId, // Coluna corrigida
         etapa_anterior: etapaAtual, 
         etapa_nova: novaEtapa 
       })
@@ -250,17 +249,19 @@ export default function TrilhoCrescimentoPage() {
     if (!pessoaSelecionada) return
     try {
       setInserindo(true)
+      
+      // Inserção corrigida usando visitante_id e observacao
       await supabase.from('visitantes_followup').insert({
-        pessoa_id: pessoaSelecionada,
-        etapa: 'cafe',
-        status: 'COMPARECEU',
-        descricao: 'Inserido manualmente através do painel de controle do Trilho.'
+        visitante_id: pessoaSelecionada,
+        etapa: 'pos_cafe',
+        status: 'compareceu',
+        observacao: 'Inserido manualmente através do painel de controle do Trilho.'
       })
 
       const { data: checkExist } = await supabase
         .from('trilho_crescimento')
         .select('id')
-        .eq('pessoa_id', pessoaSelecionada)
+        .or(`visitante_id.eq.${pessoaSelecionada},pessoa_id.eq.${pessoaSelecionada}`)
         .maybeSingle()
 
       if (checkExist) {
@@ -272,7 +273,7 @@ export default function TrilhoCrescimentoPage() {
         await supabase
           .from('trilho_crescimento')
           .insert({ 
-            pessoa_id: pessoaSelecionada, 
+            visitante_id: pessoaSelecionada, 
             etapa_atual: 'SALA_DE_NOVOS',
             ultima_interacao: new Date().toISOString()
           })
@@ -293,7 +294,7 @@ export default function TrilhoCrescimentoPage() {
     return (
       <div className="min-h-[60vh] flex flex-col items-center justify-center gap-2 text-slate-400">
         <Loader2 className="animate-spin text-indigo-600" size={32} />
-        <span className="text-xs font-bold tracking-wider uppercase">Forçando Injeção de Segurança e Atualizando Cards...</span>
+        <span className="text-xs font-bold tracking-wider uppercase">Conectando ao banco de dados...</span>
       </div>
     )
   }
@@ -393,7 +394,7 @@ export default function TrilhoCrescimentoPage() {
                       {item.etapa_atual !== 'FASE_3_MINISTERIO' && (
                         <button 
                           type="button"
-                          onClick={() => moverEtapa(item.id, item.etapa_atual, item.pessoa_id)}
+                          onClick={() => moverEtapa(item.id, item.etapa_atual, item.visitante_id)} // Alterado para visitante_id
                           className="text-indigo-600 hover:text-indigo-800 font-bold flex items-center gap-0.5 p-1.5 hover:bg-indigo-50 rounded-lg transition-colors"
                         >
                           <span>Avançar</span>
