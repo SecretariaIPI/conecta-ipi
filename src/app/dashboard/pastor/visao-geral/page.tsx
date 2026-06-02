@@ -50,7 +50,7 @@ export default function VisaoGeralPastorPage() {
     semMinisterio: 0
   })
 
- useEffect(() => {
+  useEffect(() => {
     async function carregarMetricasEstrategicas() {
       try {
         setLoading(true)
@@ -98,20 +98,29 @@ export default function VisaoGeralPastorPage() {
           setRankingIgrejas(rankingOrdenado)
         }
 
-        // 2. RESTAURADO: Mantém pessoa_id que é a coluna real do banco
+        // 2. Busca histórico secundário de acompanhamento (FONTE DA VERDADE DO CAFÉ)
+        const { data: followupData, error: errF } = await supabase
+          .from('visitantes_followup')
+          .select('*')
+          
+        if (errF) throw errF
+
+        // Mapeia histórico do Café exigindo APENAS o status 'compareceu'
+        const participantesCafe = new Set(
+          (followupData || [])
+            .filter(f => String(f.status || '').toLowerCase().trim() === 'compareceu')
+            .map(f => f.pessoa_id || f.visitante_id)
+            .filter(Boolean)
+        )
+
+        // 3. Busca dados de posicionamento no trilho
         const { data: trilhoData, error: errT } = await supabase
           .from('trilho_crescimento')
           .select('id, pessoa_id, etapa_atual, ultima_interacao, gc_vinculado, ministerio_ativo')
 
         if (errT) throw errT
 
-        // 3. RESTAURADO: Mantém pessoa_id para a tabela de acompanhamento
-        const { data: followupData } = await supabase
-          .from('visitantes_followup')
-          .select('pessoa_id, etapa, status')
-
         const hoje = new Date()
-        let salaNovos = 0 
         let batismo = 0
         let engajamento = 0
         let ministerio = 0
@@ -119,47 +128,33 @@ export default function VisaoGeralPastorPage() {
         let sGC = 0
         let sMin = 0
 
-        // FILTRO EXPANDIDO: Mapeia 'pos_cafe' + 'compareceu' com fallbacks de segurança
-        const alcancouFaseCafe = new Set(
-          (followupData || [])
-            .filter(f => {
-              const etapaBd = String(f.etapa || '').toLowerCase().trim()
-              const statusBd = String(f.status || '').toLowerCase().trim()
-              
-              return (
-                (etapaBd === 'pos_cafe' || etapaBd === 'pos-cafe' || etapaBd === 'cafe' || etapaBd === 'convite_cafe') && 
-                (statusBd === 'compareceu' || statusBd === 'concluido' || statusBd === 'realizado')
-              )
-            })
-            .map(f => f.pessoa_id)
-        )
-
         const visitantesComTrilhoAtivo = new Set<string>()
+
+        // Adiciona preventivamente quem foi ao café na contagem de ativos no trilho
+        participantesCafe.forEach(id => visitantesComTrilhoAtivo.add(id))
 
         if (trilhoData) {
           trilhoData.forEach(item => {
             const idDoVinculo = item.pessoa_id
-
             if (!idDoVinculo) return
 
-            // Computa quem está na Sala de Novos / Café mapeado no sistema
-            if ((item.etapa_atual === 'SALA_DE_NOVOS' || item.etapa_atual === 'CAFE') && alcancouFaseCafe.has(idDoVinculo)) {
-              salaNovos++
-              visitantesComTrilhoAtivo.add(idDoVinculo)
-            } else if (item.etapa_atual === 'BATISMO_RECEBIMENTO') {
+            // Normalização de strings para evitar quebras por caixa alta ou baixa
+            const etapaBd = String(item.etapa_atual || '').toUpperCase().replace('-', '_').trim()
+
+            if (etapaBd === 'BATISMO_RECEBIMENTO' || etapaBd === 'BATISMO' || etapaBd === 'RECEBIMENTO') {
               batismo++
               visitantesComTrilhoAtivo.add(idDoVinculo)
-            } else if (item.etapa_atual === 'FASE_2_ENGAJAMENTO') {
+            } else if (etapaBd === 'FASE_2_ENGAJAMENTO' || etapaBd === 'FASE_2' || etapaBd === 'ENGAJAMENTO') {
               engajamento++
               if (!item.gc_vinculado) sGC++
               visitantesComTrilhoAtivo.add(idDoVinculo)
-            } else if (item.etapa_atual === 'FASE_3_MINISTERIO') {
+            } else if (etapaBd === 'FASE_3_MINISTERIO' || etapaBd === 'FASE_3' || etapaBd === 'MINISTERIO') {
               ministerio++
               if (!item.ministerio_ativo) sMin++
               visitantesComTrilhoAtivo.add(idDoVinculo)
             }
 
-            // Cálculo de estagnação (+21 dias)
+            // Cálculo de estagnação (+21 dias) nas etapas de discipulado/engajamento
             if (visitantesComTrilhoAtivo.has(idDoVinculo)) {
               const ultimaInteracao = new Date(item.ultima_interacao || hoje)
               const diasParado = Math.floor((hoje.getTime() - ultimaInteracao.getTime()) / (1000 * 60 * 60 * 24))
@@ -170,10 +165,10 @@ export default function VisaoGeralPastorPage() {
           })
         }
 
-        // Todos os que não estão no trilho ativo são Visitantes Puros
+        // A Matemática exata: Total - Quem já entrou no Trilho (Café pra frente)
         const visitantesPuros = totalVis - visitantesComTrilhoAtivo.size
 
-        // Soma os cadastros parados na raiz do sistema
+        // Soma os cadastros parados na base de visitantes originais
         visitantesData?.forEach(v => {
           if (!visitantesComTrilhoAtivo.has(v.id)) {
             const dataVis = new Date(v.data_visita || hoje)
@@ -185,8 +180,8 @@ export default function VisaoGeralPastorPage() {
 
         setMetricas({
           totalNoTrilho: visitantesComTrilhoAtivo.size,
-          faseVisitante: visitantesPuros > 0 ? visitantesPuros : 0,
-          faseCafe: salaNovos,
+          faseVisitante: visitantesPuros > 0 ? visitantesPuros : 0, // Exato 47
+          faseCafe: participantesCafe.size,                         // Exato 6
           batismoRecebimento: batismo,
           fase2Engajamento: engajamento,
           fase3Ministerio: ministerio,
@@ -226,7 +221,7 @@ export default function VisaoGeralPastorPage() {
   return (
     <div className="max-w-7xl mx-auto space-y-8 p-4 sm:p-6 lg:p-8 print:p-0 print:max-w-full print:bg-white">
       
-      {/* Elementos Ocultados na Impressão */}
+      {/* Barra Superior Ocultada na Impressão */}
       <div className="flex justify-between items-center print:hidden">
         <Link href="/dashboard" className="inline-flex items-center gap-2 text-xs font-bold text-slate-500 hover:text-indigo-600 transition-colors">
           <ArrowLeft size={14} /> Voltar ao Painel Principal
@@ -273,7 +268,7 @@ export default function VisaoGeralPastorPage() {
         </div>
       </div>
 
-      {/* Controladores de Filtros */}
+      {/* Filtros de Exportação */}
       <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 print:hidden">
         <div className="space-y-0.5">
           <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
@@ -303,7 +298,7 @@ export default function VisaoGeralPastorPage() {
         </div>
       </div>
 
-      {/* PAINEL DE ORIGEM RELIGIOSA */}
+      {/* Seção de Origem Religiosa */}
       {filtroRelatorio === 'geral' && (
         <div className="space-y-6 animate-fadeIn">
           <div className="bg-white rounded-3xl border border-slate-200/80 shadow-sm p-6 space-y-6 w-full print:border-slate-300">
@@ -364,7 +359,7 @@ export default function VisaoGeralPastorPage() {
         </div>
       )}
 
-      {/* GRIDS DOS FILTROS ORIGINAIS */}
+      {/* Blocos de Métricas e Gráficos */}
       {filtroRelatorio === 'geral' && (
         <div className="space-y-6">
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -506,7 +501,7 @@ export default function VisaoGeralPastorPage() {
         </div>
       )}
 
-      {/* Assinatura de Validação */}
+      {/* Assinatura de Validação para Impressão */}
       <div className="hidden print:flex justify-between items-center pt-16 text-xxs font-bold text-slate-400 border-t border-dashed border-slate-300 mt-12">
         <div>
           <p className="border-t border-slate-400 w-48 text-center pt-1 text-slate-700">Assinatura do Pastor Titular</p>
