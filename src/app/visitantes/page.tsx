@@ -19,9 +19,28 @@ interface Visitante {
   origem?: string
   data_visita?: string
   confirmou_cafe?: boolean
+  visitantes_followup?: any[]
 }
-  
+
+// Função para traduzir o nome da etapa
+function getDescricaoEtapa(etapa: string) {
+  const mapeamento: { [key: string]: string } = {
+    'primeiro_contato': '1º Contato Realizado',
+    'segundo_contato': '2º Contato Realizado',
+    'intercessao': 'Intercessão Realizada',
+    'convite_cafe': 'Convite Café Realizado'
+  };
+  return mapeamento[etapa] || etapa;
+}
+
+function getBadgeStyle(origem: string) {
+  if (origem.includes('Igreja Evangélica')) return 'bg-blue-100 text-blue-700';
+  if (origem.includes('Católica')) return 'bg-amber-100 text-amber-700';
+  return 'bg-slate-100 text-slate-600';
+}
+
 export default function VisitantesPage() {
+  const [visitanteEditando, setVisitanteEditando] = useState<any | null>(null)
   const [visitantes, setVisitantes] = useState<Visitante[]>([])
   const [loading, setLoading] = useState(true)
   const [erro, setErro] = useState('')
@@ -40,17 +59,27 @@ export default function VisitantesPage() {
   async function carregarVisitantes() {
     try {
       setLoading(true)
-      const { data, error } = await supabase
+      
+      const { data: visitantesData, error: vError } = await supabase
         .from('visitantes')
         .select('*')
         .order('data_visita', { ascending: false, nullsFirst: false })
 
-      if (error) {
-        setErro(error.message)
+      const { data: followupsData, error: fError } = await supabase
+        .from('visitantes_followup')
+        .select('*')
+
+      if (vError || fError) {
+        setErro((vError?.message || '') + (fError?.message || ''))
         return
       }
 
-      setVisitantes(data || [])
+      const dadosCompletos = visitantesData.map(v => ({
+        ...v,
+        visitantes_followup: followupsData.filter(f => f.visitante_id === v.id)
+      }))
+
+      setVisitantes(dadosCompletos || [])
     } catch (err: any) {
       setErro(err.message || 'Erro desconhecido ao carregar dados.')
     } finally {
@@ -63,12 +92,12 @@ export default function VisitantesPage() {
   }, [])
 
   function formatarDataExtenso(dataStr: string) {
+    if (!dataStr) return 'Sem data'
     const [ano, mes, dia] = dataStr.split('-')
     const dataObj = new Date(Number(ano), Number(mes) - 1, Number(dia))
     return dataObj.toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' })
   }
 
-  // Agrupamento dos visitantes por data_visita
   const visitantesAgrupados = visitantes.reduce((grupos: { [key: string]: Visitante[] }, visitante) => {
     const chaveData = visitante.data_visita || 'sem_data'
     if (!grupos[chaveData]) {
@@ -78,7 +107,6 @@ export default function VisitantesPage() {
     return grupos
   }, {})
 
-  // Ordenação das chaves de data (mais recentes primeiro)
   const chavesOrdenadas = Object.keys(visitantesAgrupados).sort((a, b) => {
     if (a === 'sem_data') return 1
     if (b === 'sem_data') return -1
@@ -94,7 +122,6 @@ export default function VisitantesPage() {
 
     try {
       await supabase.from('visitantes_checklist').delete().eq('visitante_id', id)
-      await supabase.from('visitantes_timeline').delete().eq('visitante_id', id)
       await supabase.from('visitantes_followup').delete().eq('visitante_id', id)
 
       const { error } = await supabase.from('visitantes').delete().eq('id', id)
@@ -142,22 +169,6 @@ export default function VisitantesPage() {
         return
       }
 
-      const etapas = [
-        { etapa: 'primeiro_contato', responsavel: 'Secretaria Igreja' },
-        { etapa: 'segundo_contato', responsavel: 'Pastor Cleber' },
-        { etapa: 'intercessao', responsavel: 'Intercessão' },
-        { etapa: 'convite_cafe', responsavel: 'Convite Café' }
-      ]
-
-      for (const item of etapas) {
-        await supabase.from('visitantes_followup').insert({
-          visitante_id: data.id,
-          etapa: item.etapa,
-          status: 'pendente',
-          responsavel: item.responsavel
-        })
-      }
-
       await supabase.from('visitantes_checklist').insert([{ visitante_id: data.id }])
 
       limparFormulario()
@@ -197,7 +208,6 @@ export default function VisitantesPage() {
         <p className="text-slate-500 mt-1">Gerencie a recepção, acompanhamento e a integração de novos membros.</p>
       </div>
 
-      {/* Formulário de Novo Cadastro */}
       <div className="bg-white rounded-3xl border border-slate-200/80 shadow-sm p-6 space-y-4">
         <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
           <Users size={18} className="text-slate-500" /> Novo Cadastro
@@ -245,7 +255,6 @@ export default function VisitantesPage() {
         </button>
       </div>
 
-      {/* Listagem Separada Dinamicamente por Grupos de Datas */}
       <div className="space-y-8">
         {chavesOrdenadas.map((dataChave) => {
           const listaVisitantesDoDia = visitantesAgrupados[dataChave]
@@ -253,8 +262,6 @@ export default function VisitantesPage() {
 
           return (
             <div key={dataChave} className="space-y-3">
-              
-              {/* Divisória / Cabeçalho do Grupo de Visita */}
               <div className="flex items-center gap-3 px-2">
                 <div className={`p-2 rounded-xl border ${ehSemData ? 'bg-slate-100 text-slate-500 border-slate-200' : 'bg-blue-50 text-blue-600 border-blue-100'}`}>
                   <Calendar size={16} />
@@ -270,14 +277,12 @@ export default function VisitantesPage() {
                 <div className="grow border-t border-dashed border-slate-200/80 ml-2" />
               </div>
 
-              {/* Lista de Cards de Visitantes */}
               <div className="grid grid-cols-1 gap-2.5">
                 {listaVisitantesDoDia.map((visitante) => (
                   <div 
                     key={visitante.id} 
                     className="bg-white rounded-2xl border border-slate-200/70 hover:border-blue-300 shadow-xs p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all duration-200 group"
                   >
-                    {/* Bloco de Identificação */}
                     <div className="space-y-1.5 max-w-sm">
                       <div className="flex items-center gap-2">
                         <Link 
@@ -288,8 +293,34 @@ export default function VisitantesPage() {
                           {visitante.nome}
                         </Link>
                       </div>
+
+                      {/* Exibe a última etapa registrada no histórico do visitante */}
+<div className="flex gap-1.5 flex-wrap mt-2">
+  {(() => {
+    // Pega todo o histórico de followups
+    const historico = visitante.visitantes_followup || [];
+    
+    if (historico.length > 0) {
+      // Pega o último item da lista (o mais recente)
+      const ultimoRegistro = historico[historico.length - 1];
+      
+      return (
+        <span className={`text-[9px] px-2 py-0.5 rounded-md font-bold uppercase border ${ultimoRegistro.status === 'concluido' ? 'bg-green-100 text-green-700 border-green-200' : 'bg-yellow-100 text-yellow-700 border-yellow-200'}`}>
+          {getDescricaoEtapa(ultimoRegistro.etapa)}
+        </span>
+      );
+    } else {
+      // Se não houver nenhum registro, aí sim é "Aguardando Início"
+      return (
+        <span className="text-[9px] px-2 py-0.5 rounded-md font-bold uppercase bg-slate-100 text-slate-500 border border-slate-200">
+          Aguardando Início
+        </span>
+      );
+    }
+  })()}
+</div>
                       
-                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xxs font-medium text-slate-500">
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xxs font-medium text-slate-500 mt-2">
                         <span className="flex items-center gap-1 bg-slate-50 border border-slate-100 px-2 py-0.5 rounded-md">
                           <Phone size={11} className="text-slate-400" /> {visitante.telefone || '-'}
                         </span>
@@ -299,28 +330,48 @@ export default function VisitantesPage() {
                       </div>
                     </div>
 
-                    {/* Bloco de Origem e Ações */}
                     <div className="flex items-center justify-between sm:justify-end gap-4 border-t sm:border-t-0 pt-3 sm:pt-0 border-slate-100">
                       <span className="text-xxs font-semibold bg-slate-100/80 text-slate-600 border border-slate-200/40 px-2.5 py-1 rounded-lg max-w-[200px] truncate">
                         {visitante.origem || 'Não informado'}
                       </span>
-                      
-                      <button 
-                        onClick={() => excluirVisitante(visitante.id, visitante.nome)} 
-                        className="bg-rose-50 text-rose-600 hover:bg-rose-600 hover:text-white p-2.5 rounded-xl transition duration-150 flex items-center justify-center shrink-0 shadow-xs"
-                      >
+                      <button onClick={() => setVisitanteEditando(visitante)} className="text-blue-600 text-xs font-bold hover:underline px-3 py-1">Editar</button>
+                      <button onClick={() => excluirVisitante(visitante.id, visitante.nome)} className="bg-rose-50 text-rose-600 hover:bg-rose-600 hover:text-white p-2.5 rounded-xl transition duration-150 flex items-center justify-center shrink-0 shadow-xs">
                         <Trash2 size={15} />
                       </button>
                     </div>
-
                   </div>
                 ))}
               </div>
-
             </div>
           )
         })}
       </div>
+
+      {visitanteEditando && (
+        <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl">
+            <h2 className="text-xl font-bold text-blue-600 mb-4">Editar Cadastro</h2>
+            <input 
+              className="w-full border p-3 rounded-xl mb-4" 
+              value={visitanteEditando.nome}
+              onChange={(e) => setVisitanteEditando({...visitanteEditando, nome: e.target.value})}
+            />
+            <div className="flex gap-2">
+              <button onClick={() => setVisitanteEditando(null)} className="w-full bg-slate-100 py-3 rounded-xl">Cancelar</button>
+              <button 
+                onClick={async () => {
+                  await supabase.from('visitantes').update({ nome: visitanteEditando.nome }).eq('id', visitanteEditando.id);
+                  setVisitanteEditando(null);
+                  carregarVisitantes();
+                }} 
+                className="w-full bg-blue-600 text-white py-3 rounded-xl"
+              >
+                Salvar Alterações
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

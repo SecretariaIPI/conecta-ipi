@@ -235,11 +235,11 @@ export default function VisaoGeralPastorPage() {
             <Footprints size={14} /> Kanban Coletivo
           </Link>
           <button 
-            onClick={acionarImpressao}
-            className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-xs transition"
-          >
-            <Printer size={14} /> Imprimir Relatório
-          </button>
+  onClick={acionarImpressao}
+  className="inline-flex items-center gap-2 bg-[#003366] hover:bg-[#002244] text-white px-4 py-2 rounded-xl text-xs font-subtitle shadow-md transition border border-transparent"
+>
+  <Printer size={14} /> Imprimir Relatório
+</button>
         </div>
       </div>
 
@@ -255,7 +255,7 @@ export default function VisaoGeralPastorPage() {
         <div>
           <span className="hidden print:block text-xxs uppercase tracking-widest font-black text-slate-400 mb-1">Relatório Executivo Oficial</span>
           <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight flex items-center gap-2">
-            <BarChart3 className="text-indigo-600 print:hidden" size={26} />
+            <BarChart3 className="text-ipi-blue print:hidden" size={26} />
             Visão Pastoral & Saúde Estatística
           </h1>
           <p className="text-slate-500 text-xs sm:text-sm font-medium mt-1">
@@ -303,7 +303,7 @@ export default function VisaoGeralPastorPage() {
         <div className="space-y-6 animate-fadeIn">
           <div className="bg-white rounded-3xl border border-slate-200/80 shadow-sm p-6 space-y-6 w-full print:border-slate-300">
             <div className="flex items-center gap-2">
-              <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl print:hidden">
+              <div className="p-2 bg-ipi-red/10 text-ipi-red rounded-xl print:hidden">
                 <Users size={18} />
               </div>
               <div>
@@ -325,7 +325,7 @@ export default function VisaoGeralPastorPage() {
                       </span>
                     </div>
                     <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
-                      <div className="bg-indigo-600 h-full rounded-full" style={{ width: `${porcentagem}%` }}></div>
+                      <div className="bg-ipi-blue h-full rounded-full" style={{ width: `${porcentagem}%` }}></div>
                     </div>
                   </div>
                 )
@@ -346,7 +346,7 @@ export default function VisaoGeralPastorPage() {
                         <span className="truncate max-w-[180px] font-bold text-slate-800">
                           {idx + 1}. {igreja.nome}
                         </span>
-                        <span className="bg-indigo-50 border border-indigo-100 text-indigo-700 text-xxs font-black px-2 py-0.5 rounded-md whitespace-nowrap">
+                        <span className="bg-ipi-blue/10 border border-ipi-blue/20 text-ipi-blue text-xxs font-black px-2 py-0.5 rounded-md whitespace-nowrap">
                           {igreja.qtd} {igreja.qtd === 1 ? 'pessoa' : 'pessoas'} ({percentualDoSegmento}%)
                         </span>
                       </div>

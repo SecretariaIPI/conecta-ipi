@@ -1,0 +1,13 @@
+theme: {
+  extend: {
+    colors: {
+      'ipi-blue': '#003366', // Substitua pelo seu código hex oficial
+      'ipi-red': '#cc0000',  // Substitua pelo seu código hex oficial
+      'ipi-yellow': '#ffcc00'
+    },
+    fontFamily: {
+      heading: ['SeuNomeDaFonte', 'sans-serif'],
+      subtitle: ['SeuNomeDaFonte', 'sans-serif'],
+    }
+  },
+},

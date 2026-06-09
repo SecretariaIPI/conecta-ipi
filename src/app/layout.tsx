@@ -24,9 +24,7 @@ const menu = [
   { nome: 'Trilho de Crescimento', href: "/dashboard/pastor/trilho", icon: Footprints },
   { nome: 'Pessoas', href: '/pessoas', icon: Users },
   { nome: 'Visitantes', href: '/visitantes', icon: UserPlus },
-  { nome: 'Aniversários', href: '/aniversarios', icon: Cake },
   { nome: 'Campanhas', href: '/campanhas', icon: MessageSquare },
-  { nome: 'Configurações', href: '/configuracoes', icon: Settings }
 ]
 
 function Sidebar() {
