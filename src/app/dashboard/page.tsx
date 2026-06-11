@@ -1,84 +1,45 @@
 'use client'
 
 import Link from 'next/link'
-import {
-  HeartHandshake,
-  LayoutDashboard,
-  ChevronRight
-} from 'lucide-react'
 
 export default function DashboardPage() {
   return (
-    <div className="space-y-8 p-1">
-      {/* HEADER DA PÁGINA */}
-      <div className="border-b border-slate-200/80 pb-5">
-        <h1 className="text-3xl font-black text-slate-900 tracking-tight">
-          Dashboard
-        </h1>
-        <p className="text-slate-500 mt-1.5 text-sm font-medium">
-          Visão geral e estratégica ministerial
+    <div className="h-full flex flex-col justify-center items-center p-8 animate-in fade-in duration-700">
+      <div className="max-w-xl w-full text-center space-y-10">
+        
+        {/* Identidade Central */}
+        <div className="space-y-4">
+          <div className="w-24 h-24 bg-gradient-to-br from-blue-600 to-cyan-500 rounded-3xl shadow-2xl shadow-blue-500/20 flex items-center justify-center mx-auto">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M22 2L11 13" />
+              <path d="M22 2L15 22L11 13L2 9L22 2Z" />
+            </svg>
+          </div>
+          <div>
+            <h1 className="text-4xl font-black text-slate-900 tracking-tight">IPI CASCAVEL</h1>
+            <p className="text-sm text-slate-500 uppercase tracking-[0.2em] mt-2 font-bold">Plataforma Ministerial</p>
+          </div>
+        </div>
+
+        {/* Mensagem de Boas-Vindas */}
+        <div className="bg-white border border-slate-200 rounded-3xl p-10 shadow-xl shadow-slate-200/50">
+          <h2 className="text-2xl font-black text-slate-900 mb-4">Bem-vindo, Pastor.</h2>
+          <p className="text-slate-600 leading-relaxed mb-8">
+            O sistema está operando. Nossa missão é garantir que cada novo pouso receba a direção necessária para crescer em Palavra, Poder e Provisão.
+          </p>
+
+          <Link 
+            href="/dashboard/pastor/visao-geral" 
+            className="inline-flex items-center gap-2 bg-[#07111F] text-white px-8 py-4 rounded-2xl font-bold hover:bg-slate-900 transition-all shadow-lg hover:shadow-blue-500/20"
+          >
+            Acessar Centro de Operações
+          </Link>
+        </div>
+
+        {/* Rodapé Inspiracional */}
+        <p className="text-[10px] text-slate-400 uppercase tracking-widest font-bold">
+          Revelando Cristo — A jornada continua.
         </p>
-      </div>
-
-      {/* BLOCOS PRINCIPAIS DE NAVEGAÇÃO */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Card 1: Gestão de Visitantes */}
-        <Link
-          href="/visitantes"
-          className="group relative bg-gradient-to-br from-emerald-600 to-teal-700 text-white rounded-2xl p-6 shadow-md shadow-emerald-700/10 flex flex-col justify-between overflow-hidden transition duration-200 active:scale-[0.99]"
-        >
-          <div className="absolute -right-6 -bottom-6 text-emerald-500/20 transform group-hover:scale-110 group-hover:-rotate-12 transition duration-500 pointer-events-none">
-            <HeartHandshake size={150} />
-          </div>
-          
-          <div className="flex justify-between items-center z-10">
-            <div className="bg-white/10 p-2.5 rounded-xl text-white backdrop-blur-md">
-              <HeartHandshake size={22} />
-            </div>
-            <span className="text-[10px] font-bold uppercase tracking-wider bg-white/10 px-2.5 py-1 rounded-md backdrop-blur-md text-emerald-100">
-              CRM Visitantes
-            </span>
-          </div>
-
-          <div className="mt-12 z-10 space-y-1.5">
-            <h2 className="text-2xl font-black tracking-tight flex items-center gap-1.5">
-              Gestão de Visitantes
-              <ChevronRight size={18} className="transform group-hover:translate-x-1 transition" />
-            </h2>
-            <p className="text-emerald-100/90 text-xs font-medium leading-relaxed max-w-sm">
-              Cadastro, acompanhamento do funil de consolidação e controle de fichas pastorais.
-            </p>
-          </div>
-        </Link>
-
-        {/* Card 2: Dashboard Acompanhamento */}
-        <Link
-          href="/dashboard/pastor/acompanhamento"
-          className="group relative bg-gradient-to-br from-blue-600 to-indigo-700 text-white rounded-2xl p-6 shadow-md shadow-blue-700/10 flex flex-col justify-between overflow-hidden transition duration-200 active:scale-[0.99]"
-        >
-          <div className="absolute -right-6 -bottom-6 text-blue-500/20 transform group-hover:scale-110 group-hover:-rotate-12 transition duration-500 pointer-events-none">
-            <LayoutDashboard size={150} />
-          </div>
-
-          <div className="flex justify-between items-center z-10">
-            <div className="bg-white/10 p-2.5 rounded-xl text-white backdrop-blur-md">
-              <LayoutDashboard size={22} />
-            </div>
-            <span className="text-[10px] font-bold uppercase tracking-wider bg-white/10 px-2.5 py-1 rounded-md backdrop-blur-md text-blue-100">
-              Painel Estratégico
-            </span>
-          </div>
-
-          <div className="mt-12 z-10 space-y-1.5">
-            <h2 className="text-2xl font-black tracking-tight flex items-center gap-1.5">
-              Dashboard de Acompanhamento
-              <ChevronRight size={18} className="transform group-hover:translate-x-1 transition" />
-            </h2>
-            <p className="text-blue-100/90 text-xs font-medium leading-relaxed max-w-sm">
-              Métricas detalhadas e controle de engajamento ministerial de visitantes.
-            </p>
-          </div>
-        </Link>
       </div>
     </div>
   )

@@ -1,86 +1,104 @@
+'use client'
 import './globals.css'
 import Link from 'next/link'
+import { usePathname } from 'next/navigation'
 import {
-  LayoutDashboard,
   Users,
   UserPlus,
-  Cake,
-  MessageSquare,
-  Settings,
-  Home,
-  BarChart3,
   Footprints,
-  ArrowLeft
+  ArrowLeft,
+  Compass,
+  Radio
 } from 'lucide-react'
 
-export const metadata = {
-  title: 'CONECTA IPI',
-  description: 'CRM ministerial'
+// Ícone Customizado: Direcional, Agressivo e alinhado com a Missão
+function OrigamiPlaneIcon({ size = 22, className = '' }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" className={className} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M22 2L11 13" />
+      <path d="M22 2L15 22L11 13L2 9L22 2Z" />
+    </svg>
+  )
 }
 
 const menu = [
-  { nome: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { nome: 'Visão do Pastor', href: "/dashboard/pastor/visao-geral", icon: BarChart3 },
-  { nome: 'Trilho de Crescimento', href: "/dashboard/pastor/trilho", icon: Footprints },
-  { nome: 'Pessoas', href: '/pessoas', icon: Users },
-  { nome: 'Visitantes', href: '/visitantes', icon: UserPlus },
-  { nome: 'Campanhas', href: '/campanhas', icon: MessageSquare },
+  { nome: 'Novos Pousos', href: '/visitantes', icon: UserPlus },
+  { nome: 'Jornada de Integração', href: "/dashboard/pastor/trilho", icon: Footprints },
+  { nome: 'Painel Estratégico', href: "/dashboard/pastor/visao-geral", icon: Compass },
+  { nome: 'Comunidade', href: '/pessoas', icon: Users },
+  { nome: 'Comunicação', href: '/campanhas', icon: Radio },
 ]
 
 function Sidebar() {
+  const pathname = usePathname()
+
   return (
-    <aside className="w-72 bg-slate-950 text-white p-6 flex flex-col justify-between min-h-screen sticky top-0">
+    <aside className="w-72 bg-gradient-to-b from-[#07111F] to-[#10233F] text-white p-6 flex flex-col justify-between min-h-screen sticky top-0 shadow-2xl">
       <div>
-        <div className="mb-10">
-          <div className="flex items-center gap-3">
-            <Home className="text-emerald-500" />
-            <h1 className="text-2xl font-bold tracking-tight">CONECTA IPI</h1>
+        {/* Identidade Visual */}
+        <div className="mb-8">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="bg-gradient-to-br from-blue-600 to-cyan-500 p-3 rounded-2xl shadow-lg">
+              <OrigamiPlaneIcon size={24} className="text-white" />
+            </div>
+            <div>
+              <h1 className="text-xl font-black tracking-tight">IPI CASCAVEL</h1>
+              <p className="text-[10px] text-slate-400 uppercase tracking-widest">Plataforma Ministerial</p>
+            </div>
           </div>
-          <p className="text-slate-400 mt-2 text-sm">
-            CRM ministerial
-          </p>
+          
+          {/* Selo Institucional de Jornada */}
+          <div className="flex flex-wrap gap-1.5">
+            {['Chegada', 'Integração', 'Discipulado', 'Comunhão', 'Envio'].map(item => (
+              <span key={item} className="text-[9px] px-2 py-0.5 rounded-full bg-white/5 border border-white/10 text-slate-400 font-medium uppercase">
+                {item}
+              </span>
+            ))}
+          </div>
         </div>
 
-        <nav className="space-y-2">
+        {/* Navegação */}
+        <nav className="space-y-1.5">
           {menu.map((item) => {
             const Icon = item.icon
-
+            const active = pathname === item.href
+            
             return (
               <Link
                 key={item.nome}
                 href={item.href}
-                className="flex items-center gap-3 px-4 py-3 rounded-2xl hover:bg-slate-800 transition text-sm font-medium text-slate-300 hover:text-white"
+                className={`group flex items-center gap-3 px-4 py-3 rounded-2xl transition border ${
+                  active 
+                    ? 'bg-gradient-to-r from-blue-600 to-cyan-500 text-white border-blue-400/30 shadow-lg' 
+                    : 'text-slate-300 hover:bg-blue-600/10 hover:border-blue-500/20 border-transparent'
+                }`}
               >
-                <Icon size={20} />
-                <span>{item.nome}</span>
+                <Icon size={20} className={active ? 'text-white' : 'group-hover:text-cyan-400 transition'} />
+                <span className="text-sm font-medium">{item.nome}</span>
               </Link>
             )
           })}
         </nav>
       </div>
 
-      {/* Botão de Voltar Lateral Integrado ao Menu */}
-      <div className="pt-4 border-t border-slate-800">
+      {/* Rodapé Operacional */}
+      <div className="pt-6 border-t border-slate-800/50">
         <Link 
           href="/dashboard" 
-          className="flex items-center gap-3 px-4 py-3 rounded-2xl bg-slate-900 text-slate-400 hover:text-white hover:bg-slate-800 transition text-xs font-bold"
+          className="flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-[#07111F] border border-slate-800 text-slate-400 hover:text-white hover:bg-slate-800 transition text-[10px] font-bold uppercase tracking-wider"
         >
-          <ArrowLeft size={16} />
-          <span>Voltar ao Painel</span>
+          <ArrowLeft size={14} />
+          <span>Voltar ao Centro de Operações</span>
         </Link>
       </div>
     </aside>
   )
 }
 
-export default function RootLayout({
-  children
-}: {
-  children: React.ReactNode
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="pt-BR">
-      <body className="bg-slate-100 antialiased">
+      <body className="bg-gradient-to-br from-slate-50 via-blue-50/40 to-cyan-50/30 min-h-screen antialiased">
         <div className="flex min-h-screen">
           <Sidebar />
           <main className="flex-1 p-8">

@@ -104,14 +104,19 @@ export default function VisaoGeralPastorPage() {
         
         visitantesData?.forEach(v => {
           if (!v.data_visita) return
-          const dataVis = new Date(v.data_visita)
-          const diffDias = Math.floor((hoje.getTime() - dataVis.getTime()) / (1000 * 60 * 60 * 24))
+          
+          // Tratamento para evitar erro de fuso horário (UTC vs Local)
+          // Divide a string '2026-03-01' para criar a data manualmente
+          const [ano, mes, dia] = v.data_visita.split('T')[0].split('-').map(Number);
+          const dataVis = new Date(ano, mes - 1, dia);
+          
+          const diffDias = Math.floor((hoje.getTime() - dataVis.getTime()) / (1000 * 60 * 60 * 24));
           
           if (diffDias <= 30) v30++
           if (diffDias <= 90) v90++
           if (dataVis.getFullYear() === anoAtual) {
             vAno++
-            contagemMeses[dataVis.getMonth()]++
+            contagemMeses[dataVis.getMonth()]++ 
           }
         })
         
