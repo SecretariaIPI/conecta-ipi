@@ -1,4 +1,5 @@
 'use client'
+declare module '*.css'
 import './globals.css'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
