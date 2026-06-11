@@ -23,9 +23,9 @@ export default function DashboardPage() {
 
         {/* Mensagem de Boas-Vindas */}
         <div className="bg-white border border-slate-200 rounded-3xl p-10 shadow-xl shadow-slate-200/50">
-          <h2 className="text-2xl font-black text-slate-900 mb-4">Bem-vindo, Pastor.</h2>
+          <h2 className="text-2xl font-black text-slate-900 mb-4"> Bem-vindo ao Centro de Operações.</h2>
           <p className="text-slate-600 leading-relaxed mb-8">
-            O sistema está operando. Nossa missão é garantir que cada novo pouso receba a direção necessária para crescer em Palavra, Poder e Provisão.
+            Cada pessoa que chega é uma oportunidade para revelar Cristo através da Palavra, Poder e Provisão. Utilize esta plataforma para acompanhar a jornada de integração, discipulado e envio.
           </p>
 
           <Link 
@@ -36,9 +36,20 @@ export default function DashboardPage() {
           </Link>
         </div>
 
+<div className="pt-6">
+  <div className="
+    w-24 h-px
+    bg-gradient-to-r
+    from-transparent
+    via-cyan-400
+    to-transparent
+    mx-auto
+  " />
+</div>
+
         {/* Rodapé Inspiracional */}
         <p className="text-[10px] text-slate-400 uppercase tracking-widest font-bold">
-          Revelando Cristo — A jornada continua.
+          Revelando Cristo através da Palavra, Poder e Provisão.
         </p>
       </div>
     </div>
