@@ -293,13 +293,13 @@ export default function VisaoGeralPastorPage() {
       
       {/* Barra Superior */}
       <div className="flex justify-between items-center print:hidden">
-        <Link href="/dashboard" className="inline-flex items-center gap-2 text-xs font-bold text-slate-500 hover:text-indigo-600 transition-colors">
-          <ArrowLeft size={14} /> Voltar ao Painel Principal
+        <Link href="/dashboard/pastor/trilho" className="inline-flex items-center gap-2 text-xs font-bold text-slate-500 hover:text-indigo-600 transition-colors">
+          <ArrowLeft size={14} /> Voltar a jornada de integração
         </Link>
         
         <div className="flex items-center gap-2">
           <Link 
-            href="/dashboard/pastor/trilho"
+            href="/dashboard/pastor/trilho-crescimento"
             className="inline-flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2 rounded-xl text-xs font-bold transition"
           >
             <Footprints size={14} /> Painel de Linha de Voo

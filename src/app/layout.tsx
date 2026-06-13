@@ -9,7 +9,8 @@ import {
   Footprints,
   ArrowLeft,
   Compass,
-  Radio
+  Radio,
+  CupSoda
 } from 'lucide-react'
 
 // Ícone Customizado: Direcional, Agressivo e alinhado com a Missão
@@ -28,6 +29,7 @@ const menu = [
   { nome: 'Painel Estratégico', href: "/dashboard/pastor/visao-geral", icon: Compass },
   { nome: 'Comunidade', href: '/pessoas', icon: Users },
   { nome: 'Comunicação', href: '/campanhas', icon: Radio },
+  { nome: 'Café convites', href: '/dashboard/cafe-convites', icon: CupSoda }
 ]
 
 function Sidebar() {
@@ -85,7 +87,7 @@ function Sidebar() {
       {/* Rodapé Operacional */}
       <div className="pt-6 border-t border-slate-800/50">
         <Link 
-          href="/dashboard" 
+         href="/dashboard/pastor/visao-geral"
           className="flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-[#07111F] border border-slate-800 text-slate-400 hover:text-white hover:bg-slate-800 transition text-[10px] font-bold uppercase tracking-wider"
         >
           <ArrowLeft size={14} />
