@@ -17,11 +17,11 @@ const supabase = createClient(
 
 interface MetricasTrilho {
   totalNoTrilho: number
-  faseChegada: number      // Novos visitantes recebidos
-  faseIntegracao: number    // Conectados através do Café e acolhimento
-  batismoRecebimento: number // Batismo, membresia e fundamentos (Discipulado)
-  faseDiscipulado: number   // Participação ativa em GC (Comunhão)
-  faseEnvio: number        // Servindo em ministérios e missão (Envio)
+  faseChegada: number
+  faseIntegracao: number
+  batismoRecebimento: number
+  faseDiscipulado: number
+  faseEnvio: number
   totalRetidos: number
   semGC: number
   semMinisterio: number
@@ -56,15 +56,13 @@ export default function VisaoGeralPastorPage() {
   const [filtroRelatorio, setFiltroRelatorio] = useState<'geral' | 'criticos' | 'consolidacao'>('geral')
   const [estatisticasOrigem, setEstatisticasOrigem] = useState<{ [key: string]: number }>({})
   const [rankingIgrejas, setRankingIgrejas] = useState<DenominacaoRanking[]>([])
+  const [atencaoPastoral, setAtencaoPastoral] = useState<any[]>([])
   
-  // Janelas temporais, riscos e saúde
   const [volumeTempo, setVolumeTempo] = useState<VolumetriaTempo>({ ultimos30: 0, ultimos90: 0, esteAno: 0 })
   const [mapaRisco, setMapaRisco] = useState<MapaRisco>({ alto: 0, medio: 0, baixo: 0 })
   const [indiceSaude, setIndiceSaude] = useState(100)
   
-  // Histórico de Tendência Mensal
   const [tendenciaMensal, setTendenciaMensal] = useState<MesTendencia[]>([])
-
   const [metricas, setMetricas] = useState<MetricasTrilho>({
     totalNoTrilho: 0,
     faseChegada: 0,
@@ -82,11 +80,9 @@ export default function VisaoGeralPastorPage() {
       try {
         setLoading(true)
         setErro(null)
-
         const hoje = new Date()
         const anoAtual = hoje.getFullYear()
-
-        // 1. Busca dados gerais de visitantes
+        
         const { data: visitantesData, error: errV } = await supabase
           .from('visitantes')
           .select('id, origem, data_visita')
@@ -96,27 +92,23 @@ export default function VisaoGeralPastorPage() {
         const totalVis = visitantesData?.length || 0
         setTotalVisitantes(totalVis)
 
-        // Inicialização do vetor de tendência mensal
         const mesesNomes = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
         const contagemMeses = Array(12).fill(0)
-
         let v30 = 0, v90 = 0, vAno = 0
         
         visitantesData?.forEach(v => {
           if (!v.data_visita) return
           
-          // Tratamento para evitar erro de fuso horário (UTC vs Local)
-          // Divide a string '2026-03-01' para criar a data manualmente
-          const [ano, mes, dia] = v.data_visita.split('T')[0].split('-').map(Number);
-          const dataVis = new Date(ano, mes - 1, dia);
+          const [ano, mes, dia] = v.data_visita.split('T')[0].split('-').map(Number)
+          const dataVis = new Date(ano, mes - 1, dia)
           
-          const diffDias = Math.floor((hoje.getTime() - dataVis.getTime()) / (1000 * 60 * 60 * 24));
+          const diffDias = Math.floor((hoje.getTime() - dataVis.getTime()) / (1000 * 60 * 60 * 24))
           
           if (diffDias <= 30) v30++
           if (diffDias <= 90) v90++
           if (dataVis.getFullYear() === anoAtual) {
             vAno++
-            contagemMeses[dataVis.getMonth()]++ 
+            contagemMeses[dataVis.getMonth()]++
           }
         })
         
@@ -125,13 +117,13 @@ export default function VisaoGeralPastorPage() {
 
         if (visitantesData) {
           const mapaIgrejasEspecificas: { [key: string]: number } = {}
-
           const mapaOrigens = visitantesData.reduce((acc: { [key: string]: number }, v) => {
             let chave = v.origem || 'Não informou'
             
             if (chave.startsWith('Igreja Evangélica')) {
               acc['Igreja Evangélica'] = (acc['Igreja Evangélica'] || 0) + 1
               
+              // CORREÇÃO BUG 2: regex corrigida (estava com ** ao redor dos parênteses)
               const extrairNome = chave.match(/\(([^)]+)\)/)
               if (extrairNome && extrairNome[1]) {
                 const nomeIgreja = extrairNome[1].trim()
@@ -147,15 +139,12 @@ export default function VisaoGeralPastorPage() {
           }, {})
 
           setEstatisticasOrigem(mapaOrigens)
-
           const rankingOrdenado = Object.keys(mapaIgrejasEspecificas)
             .map(nome => ({ nome, qtd: mapaIgrejasEspecificas[nome] }))
             .sort((a, b) => b.qtd - a.qtd)
-
           setRankingIgrejas(rankingOrdenado)
         }
 
-        // 2. Busca histórico de presença no Café de Boas-Vindas
         const { data: followupData, error: errF } = await supabase
           .from('visitantes_followup')
           .select('*')
@@ -169,22 +158,15 @@ export default function VisaoGeralPastorPage() {
             .filter(Boolean)
         )
 
-        // 3. Busca posicionamento nas estações da jornada
         const { data: trilhoData, error: errT } = await supabase
           .from('trilho_crescimento')
           .select('id, pessoa_id, etapa_atual, ultima_interacao, gc_vinculado, ministerio_ativo')
 
         if (errT) throw errT
 
-        let batismo = 0
-        let discipulado = 0
-        let envio = 0
-        let retidos = 0
-        let sGC = 0
-        let sMin = 0
-
+        let batismo = 0, discipulado = 0, envio = 0, retidos = 0
+        let sGC = 0, sMin = 0
         let rAlto = 0, rMedio = 0, rBaixo = 0
-
         const pessoasAtivasNaJornada = new Set<string>()
         participantesCafe.forEach(id => pessoasAtivasNaJornada.add(id))
 
@@ -192,9 +174,7 @@ export default function VisaoGeralPastorPage() {
           trilhoData.forEach(item => {
             const idDoVinculo = item.pessoa_id
             if (!idDoVinculo) return
-
             const etapaBd = String(item.etapa_atual || '').toUpperCase().replace('-', '_').trim()
-
             if (etapaBd === 'BATISMO_RECEBIMENTO' || etapaBd === 'BATISMO' || etapaBd === 'RECEBIMENTO') {
               batismo++
               pessoasAtivasNaJornada.add(idDoVinculo)
@@ -208,15 +188,12 @@ export default function VisaoGeralPastorPage() {
               pessoasAtivasNaJornada.add(idDoVinculo)
             }
 
-            // Monitoramento Semafórico de Risco Relacional
             if (pessoasAtivasNaJornada.has(idDoVinculo)) {
               const ultimaInteracao = new Date(item.ultima_interacao || hoje)
               const diasParado = Math.floor((hoje.getTime() - ultimaInteracao.getTime()) / (1000 * 60 * 60 * 24))
-              
               if (diasParado >= 60) rAlto++
               else if (diasParado >= 30) rMedio++
               else if (diasParado >= 15) rBaixo++
-
               if (diasParado >= 21) retidos++
             }
           })
@@ -224,23 +201,20 @@ export default function VisaoGeralPastorPage() {
 
         const chegadaPura = totalVis - pessoasAtivasNaJornada.size
 
-        // Triagem de risco para quem acabou de chegar
         visitantesData?.forEach(v => {
           if (!pessoasAtivasNaJornada.has(v.id)) {
             const dataVis = new Date(v.data_visita || hoje)
             const diasSemAcao = Math.floor((hoje.getTime() - dataVis.getTime()) / (1000 * 60 * 60 * 24))
-            
             if (diasSemAcao >= 60) rAlto++
             else if (diasSemAcao >= 30) rMedio++
             else if (diasSemAcao >= 15) rBaixo++
-
             if (diasSemAcao >= 21) retidos++
           }
         })
 
         setMapaRisco({ alto: rAlto, medio: rMedio, baixo: rBaixo })
 
-        let scoreDesconto = (rAlto * 3) + (rMedio * 1.5) + (sGC * 2) + (sMin * 1)
+        let scoreDesconto = (rAlto * 1.5) + (rMedio * 0.75) + (sGC * 1) + (sMin * 0.5)
         let totalCalculado = 100 - (totalVis > 0 ? (scoreDesconto / totalVis) * 100 : 0)
         setIndiceSaude(Math.max(15, Math.min(100, Math.round(totalCalculado))))
 
@@ -255,6 +229,40 @@ export default function VisaoGeralPastorPage() {
           semGC: sGC,
           semMinisterio: sMin
         })
+
+        const casosCriticos: Array<{ pessoa_id: string; dias: number; etapa: string }> = []
+        if (trilhoData) {
+          trilhoData.forEach(item => {
+            const idDoVinculo = item.pessoa_id
+            if (!idDoVinculo) return
+            const ultimaInteracao = new Date(item.ultima_interacao || hoje)
+            const diasParado = Math.floor(
+              (hoje.getTime() - ultimaInteracao.getTime()) / (1000 * 60 * 60 * 24)
+            )
+            if (diasParado >= 21) {
+              casosCriticos.push({
+                pessoa_id: idDoVinculo,
+                dias: diasParado,
+                etapa: String(item.etapa_atual || 'Desconhecido').trim()
+              })
+            }
+          })
+        }
+
+        const idsCriticos = Array.from(new Set(casosCriticos.map(c => c.pessoa_id).filter(Boolean)))
+        if (idsCriticos.length > 0) {
+          const { data: pessoas } = await supabase
+            .from('pessoas')
+            .select('id,nome,telefone')
+            .in('id', idsCriticos)
+          const resultado = casosCriticos.map(caso => ({
+            ...caso,
+            pessoa: pessoas?.find(p => p.id === caso.pessoa_id)
+          }))
+          setAtencaoPastoral(resultado)
+        } else {
+          setAtencaoPastoral([])
+        }
 
       } catch (err: any) {
         console.error('Erro na visão pastoral:', err)
@@ -271,26 +279,48 @@ export default function VisaoGeralPastorPage() {
     ? Math.round(((metricas.batismoRecebimento + metricas.faseDiscipulado + metricas.faseEnvio) / totalVisitantes) * 100)
     : 0
 
-  // Cálculo das taxas reais de avanço relacional conforme nova padronização
   const avancoChegadaParaIntegracao = metricas.faseChegada > 0 ? Math.round((metricas.faseIntegracao / (metricas.faseChegada + metricas.faseIntegracao)) * 100) : 0
   const avancoIntegracaoParaDiscipulado = metricas.faseIntegracao > 0 ? Math.round((metricas.batismoRecebimento / metricas.faseIntegracao) * 100) : 0
   const avancoDiscipuladoParaComunhao = metricas.batismoRecebimento > 0 ? Math.round((metricas.faseDiscipulado / metricas.batismoRecebimento) * 100) : 0
   const avancoComunhaoParaEnvio = metricas.faseDiscipulado > 0 ? Math.round((metricas.faseEnvio / metricas.faseDiscipulado) * 100) : 0
 
+  const pessoasPerdidas = metricas.faseChegada
+
+  const principalGargalo =
+  avancoChegadaParaIntegracao < avancoIntegracaoParaDiscipulado
+    ? 'Chegada → Integração'
+    : 'Integração → Discipulado'
+
+  const taxaConversaoInicial =
+    metricas.faseChegada + metricas.faseIntegracao > 0
+      ? Math.round(
+          (metricas.faseIntegracao / (metricas.faseChegada + metricas.faseIntegracao)) * 100
+        )
+      : 0
+
+  const pessoasEmProcesso =
+    metricas.faseIntegracao + metricas.batismoRecebimento + metricas.faseDiscipulado
+
   const maiorVolumeMensal = Math.max(...tendenciaMensal.map(m => m.qtd), 1)
 
+  // CORREÇÃO BUG 1: loading check mantido dentro do componente, antes do return principal
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[400px] gap-3">
-        <Loader2 className="animate-spin text-indigo-600" size={32} />
-        <p className="text-xs font-bold text-slate-500">Calculando linhas de voo e indicadores pastorais...</p>
+      <div className="max-w-7xl mx-auto p-8">
+        <div className="bg-white border border-slate-200 rounded-3xl p-12 flex flex-col items-center justify-center gap-4 shadow-sm">
+          <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+          <p className="text-sm font-medium text-slate-500">
+            Carregando painel estratégico...
+          </p>
+        </div>
       </div>
     )
   }
 
+  // CORREÇÃO BUG 1: único return principal com todo o JSX dentro do componente
   return (
     <div className="max-w-7xl mx-auto space-y-8 p-4 sm:p-6 lg:p-8 print:p-0 print:max-w-full print:bg-white">
-      
+
       {/* Barra Superior */}
       <div className="flex justify-between items-center print:hidden">
         <Link href="/dashboard/pastor/trilho" className="inline-flex items-center gap-2 text-xs font-bold text-slate-500 hover:text-indigo-600 transition-colors">
@@ -320,7 +350,7 @@ export default function VisaoGeralPastorPage() {
         </div>
       )}
 
-      {/* QUADRO EXECUTIVO PARA O CONSELHO (Foco de Impressão) */}
+      {/* QUADRO EXECUTIVO PARA O CONSELHO */}
       <div className="hidden print:block border-2 border-slate-800 rounded-3xl p-6 bg-slate-50/50 mb-6">
         <h2 className="text-sm font-black uppercase tracking-wider text-slate-900 border-b pb-2 mb-3">Resumo Executivo — Conselho Pastoral IPI Cascavel</h2>
         <div className="grid grid-cols-3 gap-6 text-xxs font-bold text-slate-700">
@@ -342,7 +372,7 @@ export default function VisaoGeralPastorPage() {
         </div>
       </div>
 
-      {/* Cabeçalho Principal (Mantendo a frase exata solicitada) */}
+      {/* Cabeçalho Principal */}
       <div className="border-b border-slate-200 pb-5 flex justify-between items-end print:border-b-2 print:border-slate-900">
         <div>
           <span className="hidden print:block text-xxs uppercase tracking-widest font-black text-slate-400 mb-1">Documento Oficial de Direção Coletiva</span>
@@ -351,7 +381,7 @@ export default function VisaoGeralPastorPage() {
             Visão Pastoral & Saúde da Igreja
           </h1>
           <p className="text-slate-500 text-xs sm:text-sm font-medium mt-1">
-            Mapeamento da Jornada de Integração: gerenciamento de novos novos pousos, discipulado e prontidão para envio missionário.
+            Mapeamento da Jornada de Integração: gerenciamento de novos pousos, discipulado e prontidão para envio.
           </p>
         </div>
         <div className="hidden print:block text-right text-xxs font-bold text-slate-500">
@@ -390,51 +420,146 @@ export default function VisaoGeralPastorPage() {
         </div>
       </div>
 
-      {/* CARDS PASTORAIS E VELOCIDADE DE CRESCIMENTO */}
-      {filtroRelatorio === 'geral' && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 animate-fadeIn">
-          <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-xs flex items-center gap-4 print:border-slate-300">
-            <div className={`p-3 rounded-xl ${indiceSaude > 80 ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}>
-              <HeartPulse size={24} />
+
+{/* CARDS EXECUTIVOS */}
+<div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-6">
+
+  {/* Ponto de Atenção */}
+  <div className="bg-white border border-amber-200 p-5 rounded-2xl">
+    <span className="text-xs font-black text-amber-600 uppercase">
+      ⚠️ Ponto de Atenção
+    </span>
+
+    <h3 className="text-xl font-black text-slate-900 mt-2">
+      Chegada → Integração
+    </h3>
+
+    <p className="text-sm font-semibold text-slate-700 mt-3">
+      Apenas {metricas.faseIntegracao} de {totalVisitantes} visitantes avançaram para o Café de Integração.
+    </p>
+
+    <p className="text-xs text-slate-500 mt-3 leading-relaxed">
+    
+    </p>
+
+    <div className="mt-4 inline-flex items-center px-3 py-1 rounded-full bg-amber-50 text-amber-700 text-xs font-bold">
+      Taxa de avanço: {taxaConversaoInicial}%
+    </div>
+  </div>
+
+  {/* Em Desenvolvimento */}
+  <div className="bg-white border border-blue-200 p-5 rounded-2xl">
+    <span className="text-xs font-black text-blue-600 uppercase">
+      👥 Em Desenvolvimento
+    </span>
+
+    <h3 className="text-4xl font-black text-blue-600 mt-2">
+      {pessoasEmProcesso}
+    </h3>
+
+    <p className="text-xs text-slate-500 mt-2">
+      Pessoas atualmente em Integração, Sala de Novos e Discipulado.
+    </p>
+  </div>
+
+  {/* Perda Potencial */}
+  <div className="bg-white border border-rose-200 p-5 rounded-2xl">
+    <span className="text-xs font-black text-rose-600 uppercase">
+      🚨 Casos Críticos
+    </span>
+
+    <h3 className="text-4xl font-black text-rose-600 mt-2">
+      {mapaRisco.alto}
+    </h3>
+
+    <p className="text-xs text-slate-500 mt-2">
+      Pessoas sem retorno, sem contato ou sem avanço há mais de 60 dias.
+    </p>
+  </div>
+
+  {/* Saúde da Igreja */}
+  <div className="bg-white border border-emerald-200 p-5 rounded-2xl">
+    <span className="text-xs font-black text-emerald-600 uppercase">
+      ❤️ Saúde da Igreja
+    </span>
+
+    <h3 className="text-4xl font-black text-emerald-600 mt-2">
+      {indiceSaude}%
+    </h3>
+
+    <p className="text-xs text-slate-500 mt-2">
+      Indicador geral de retenção, acompanhamento e cuidado pastoral.
+    </p>
+  </div>
+
+  {/* Volume Total do Ano */}
+  <div className="bg-white border border-slate-200 rounded-2xl p-5">
+    <div className="flex items-center gap-4">
+      <div className="w-16 h-16 rounded-2xl bg-indigo-50 flex items-center justify-center">
+        <PlaneTakeoff className="text-indigo-600" size={28} />
+      </div>
+
+      <div>
+        <p className="text-xs font-black uppercase tracking-wider text-slate-500">
+          Volume Total do Ano
+        </p>
+
+        <h3 className="text-5xl font-black text-indigo-600 mt-1">
+          {totalVisitantes}
+        </h3>
+
+        <p className="text-sm text-slate-500 mt-1">
+          Registros totais em {new Date().getFullYear()}
+        </p>
+      </div>
+    </div>
+  </div>
+
+</div>
+{/* fim do grid de cards */}
+{/* Atenção Pastoral */}
+      {filtroRelatorio === 'geral' && atencaoPastoral.length > 0 && (
+        <div className="bg-white border border-rose-200 rounded-3xl p-6 shadow-sm">
+          <div className="flex items-center gap-3 mb-5">
+            <div className="bg-rose-100 p-3 rounded-xl">
+              <ShieldAlert size={20} className="text-rose-600" />
             </div>
             <div>
-              <span className="text-xxs font-black text-slate-400 uppercase tracking-wider block">Índice de Saúde Pastoral</span>
-              <h3 className="text-2xl font-black text-slate-900 mt-0.5">{indiceSaude}%</h3>
-              <p className="text-[10px] text-slate-400 font-medium">Estabilidade de retenção</p>
+              <h3 className="text-sm font-black uppercase tracking-wider text-slate-800">
+                Atenção Pastoral Imediata
+              </h3>
+              <p className="text-xs text-slate-500">
+                Pessoas sem acompanhamento recente.
+              </p>
             </div>
           </div>
-
-          <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-xs flex items-center gap-4 print:border-slate-300">
-            <div className="p-3 rounded-xl bg-blue-50 text-blue-600">
-              <CalendarDays size={24} />
-            </div>
-            <div>
-              <span className="text-xxs font-black text-slate-400 uppercase tracking-wider block">Chegadas (30 Dias)</span>
-              <h3 className="text-2xl font-black text-slate-900 mt-0.5">+{volumeTempo.ultimos30}</h3>
-              <p className="text-[10px] text-slate-400 font-medium">Novos pousos na igreja</p>
-            </div>
-          </div>
-
-          <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-xs flex items-center gap-4 print:border-slate-300">
-            <div className="p-3 rounded-xl bg-slate-100 text-slate-700">
-              <CalendarDays size={24} />
-            </div>
-            <div>
-              <span className="text-xxs font-black text-slate-400 uppercase tracking-wider block">Chegadas (90 Dias)</span>
-              <h3 className="text-2xl font-black text-slate-900 mt-0.5">+{volumeTempo.ultimos90}</h3>
-              <p className="text-[10px] text-slate-400 font-medium">Fluxo trimestral de entrada</p>
-            </div>
-          </div>
-
-          <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-xs flex items-center gap-4 print:border-slate-300">
-            <div className="p-3 rounded-xl bg-indigo-50 text-indigo-600">
-              <PlaneTakeoff size={24} />
-            </div>
-            <div>
-              <span className="text-xxs font-black text-slate-400 uppercase tracking-wider block">Volume Total do Ano</span>
-              <h3 className="text-2xl font-black text-indigo-600 mt-0.5">{volumeTempo.esteAno}</h3>
-              <p className="text-[10px] text-slate-400 font-medium">Registros totais em 2026</p>
-            </div>
+          <div className="space-y-3">
+            {atencaoPastoral.slice(0, 10).map((item) => (
+              <div
+                key={item.pessoa_id}
+                className="flex items-center justify-between border rounded-xl p-4"
+              >
+                <div>
+                  <p className="font-bold text-slate-800">
+                    {item.pessoa?.nome}
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    {item.dias} dias sem contato
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-xs font-bold text-rose-600">
+                    {item.etapa}
+                  </p>
+                  <Link
+                    href={`/pessoas/${item.pessoa_id}`}
+                    className="text-xs text-blue-600 hover:underline"
+                  >
+                    Abrir ficha
+                  </Link>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       )}
@@ -451,7 +576,6 @@ export default function VisaoGeralPastorPage() {
               <p className="text-xxs font-medium text-slate-400">Acompanhamento mês a mês do volume de novas chegadas ao longo de 2026.</p>
             </div>
           </div>
-
           <div className="grid grid-cols-3 sm:grid-cols-6 md:grid-cols-12 gap-3 pt-2">
             {tendenciaMensal.map((mes, idx) => {
               const alturaPercentual = Math.max(8, Math.round((mes.qtd / maiorVolumeMensal) * 100))
@@ -489,7 +613,6 @@ export default function VisaoGeralPastorPage() {
                 <p className="text-xxs font-medium text-slate-400">Histórico e contexto espiritual da base de novas pessoas.</p>
               </div>
             </div>
-
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               {['Igreja Católica', 'Igreja Evangélica', 'Não pertence a nenhuma igreja', 'Não informou'].map((opcao) => {
                 const currentQtd = estatisticasOrigem[opcao] || 0
@@ -509,7 +632,6 @@ export default function VisaoGeralPastorPage() {
                 )
               })}
             </div>
-
             {rankingIgrejas.length > 0 && (
               <div className="border-t border-slate-100 pt-5 space-y-3 print:border-slate-300">
                 <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
@@ -537,7 +659,7 @@ export default function VisaoGeralPastorPage() {
         </div>
       )}
 
-      {/* FUNIL DA JORNADA DE INTEGRAÇÃO (ATUALIZADO E SIMPLIFICADO) */}
+      {/* FUNIL DA JORNADA DE INTEGRAÇÃO */}
       {filtroRelatorio === 'geral' && (
         <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs print:border-slate-300">
           <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider mb-5 flex items-center gap-1">
@@ -554,9 +676,7 @@ export default function VisaoGeralPastorPage() {
                 <div className="bg-amber-500 h-full" style={{ width: `${avancoChegadaParaIntegracao}%` }} />
               </div>
             </div>
-
             <div className="flex justify-center text-slate-300 my-1"><ArrowDown size={14} /></div>
-
             <div>
               <div className="flex justify-between text-xs font-bold text-slate-700 mb-1">
                 <span className="flex items-center gap-1">☕ Integração → 📖 Discipulado</span>
@@ -566,9 +686,7 @@ export default function VisaoGeralPastorPage() {
                 <div className="bg-indigo-500 h-full" style={{ width: `${avancoIntegracaoParaDiscipulado}%` }} />
               </div>
             </div>
-
             <div className="flex justify-center text-slate-300 my-1"><ArrowDown size={14} /></div>
-
             <div>
               <div className="flex justify-between text-xs font-bold text-slate-700 mb-1">
                 <span className="flex items-center gap-1">📖 Discipulado → 🤝 Comunhão</span>
@@ -578,9 +696,7 @@ export default function VisaoGeralPastorPage() {
                 <div className="bg-blue-500 h-full" style={{ width: `${avancoDiscipuladoParaComunhao}%` }} />
               </div>
             </div>
-
             <div className="flex justify-center text-slate-300 my-1"><ArrowDown size={14} /></div>
-
             <div>
               <div className="flex justify-between text-xs font-bold text-slate-700 mb-1">
                 <span className="flex items-center gap-1">🤝 Comunhão → 🚀 Envio</span>
@@ -594,35 +710,6 @@ export default function VisaoGeralPastorPage() {
         </div>
       )}
 
-      {/* Volumetria Estática das Estações */}
-      {filtroRelatorio === 'geral' && (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-white border border-slate-200 p-4 rounded-xl print:border-slate-300">
-            <span className="text-xxs font-black text-slate-400 uppercase tracking-wider block">✈️ Estação Chegada</span>
-            <h3 className="text-2xl font-black text-slate-900 mt-1 tracking-tight">{metricas.faseChegada}</h3>
-            <p className="text-xxs text-slate-400 mt-1">Apenas cadastrados, fora do trilho</p>
-          </div>
-
-          <div className="bg-white border border-slate-200 p-4 rounded-xl print:border-slate-300">
-            <span className="text-xxs font-black text-slate-400 uppercase tracking-wider block">☕ Estação Integração</span>
-            <h3 className="text-2xl font-black text-slate-900 mt-1 tracking-tight">{metricas.faseIntegracao}</h3>
-            <p className="text-xxs text-slate-400 mt-1">Passaram pelo Café / Acolhimento</p>
-          </div>
-
-          <div className="bg-white border border-slate-200 p-4 rounded-xl print:border-slate-300">
-            <span className="text-xxs font-black text-slate-400 uppercase tracking-wider block">🚀 Prontos para Envio</span>
-            <h3 className="text-2xl font-black text-blue-600 mt-1 tracking-tight">{taxaEnvioMissionario}%</h3>
-            <p className="text-xxs text-slate-400 mt-1">Taxa de retenção global</p>
-          </div>
-
-          <div className="bg-white border border-slate-200 p-4 rounded-xl print:border-slate-300">
-            <span className="text-xxs font-black text-slate-400 uppercase tracking-wider block">🚨 Casos Parados</span>
-            <h3 className={`text-2xl font-black mt-1 tracking-tight ${metricas.totalRetidos > 0 ? 'text-rose-600' : 'text-slate-900'}`}>{metricas.totalRetidos}</h3>
-            <p className="text-xxs text-slate-400 mt-1">Sem interações há +21 dias</p>
-          </div>
-        </div>
-      )}
-
       {/* PAINEL SEMAFÓRICO DE RISCO PASTORAL */}
       {filtroRelatorio === 'criticos' && (
         <div className="space-y-6">
@@ -632,30 +719,27 @@ export default function VisaoGeralPastorPage() {
             </h3>
             <p className="text-xxs text-rose-700 print:text-slate-500">Divisão baseada nos dias exatos sem registro de contato prático, visita ou atualização de plano de voo.</p>
           </div>
-
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="border border-red-200 p-5 rounded-2xl bg-red-50/50 space-y-1.5 border-l-4 border-l-red-600">
               <div className="flex justify-between items-center">
                 <h4 className="text-xs font-black text-red-900 uppercase tracking-tight">🔴 Alto Risco Pastoral</h4>
                 <span className="text-2xl font-black text-red-700">{mapaRisco.alto}</span>
               </div>
-              <p className="text-xxs text-red-700 font-medium">Sem nenhuma atualização relacional há **mais de 60 dias**. Risco imediato de evasão.</p>
+              <p className="text-xxs text-red-700 font-medium">Sem nenhuma atualização relacional há mais de 60 dias. Risco imediato de evasão.</p>
             </div>
-
             <div className="border border-amber-200 p-5 rounded-2xl bg-amber-50/40 space-y-1.5 border-l-4 border-l-amber-500">
               <div className="flex justify-between items-center">
                 <h4 className="text-xs font-black text-amber-900 uppercase tracking-tight">🟠 Médio Risco (Atenção)</h4>
                 <span className="text-2xl font-black text-amber-700">{mapaRisco.medio}</span>
               </div>
-              <p className="text-xxs text-amber-700 font-medium">Estagnados entre **30 e 59 dias**. Necessitam de ligação, café individual ou visita agendada.</p>
+              <p className="text-xxs text-amber-700 font-medium">Estagnados entre 30 e 59 dias. Necessitam de ligação, café individual ou visita agendada.</p>
             </div>
-
             <div className="border border-emerald-200 p-5 rounded-2xl bg-emerald-50/30 space-y-1.5 border-l-4 border-l-emerald-500">
               <div className="flex justify-between items-center">
                 <h4 className="text-xs font-black text-emerald-900 uppercase tracking-tight">🟢 Baixo Risco (Monitoramento)</h4>
                 <span className="text-2xl font-black text-emerald-700">{mapaRisco.baixo}</span>
               </div>
-              <p className="text-xxs text-emerald-700 font-medium">Última ação entre **15 e 29 dias**. Fluxo esperado de acompanhamento regular das equipes.</p>
+              <p className="text-xxs text-emerald-700 font-medium">Última ação entre 15 e 29 dias. Fluxo esperado de acompanhamento regular das equipes.</p>
             </div>
           </div>
 
@@ -670,11 +754,10 @@ export default function VisaoGeralPastorPage() {
                   <p className="text-xxs text-slate-400 mt-0.5">Mapeados em Comunhão, mas permanecem sem nenhum vínculo de GC registrado no prontuário técnico.</p>
                 </div>
               </div>
-
               <div className="p-4 bg-slate-50 border rounded-xl flex items-start gap-3">
                 <HelpCircle size={18} className="text-purple-500 shrink-0 mt-0.5" />
                 <div>
-                  <h4 className="text-xs font-bold text-slate-800">Estação Envio Missionário Sem Atividade Prática: {metricas.semMinisterio} pessoas</h4>
+                  <h4 className="text-xs font-bold text-slate-800">Estação Envio Sem Atividade Prática: {metricas.semMinisterio} pessoas</h4>
                   <p className="text-xxs text-slate-400 mt-0.5">Líderes na estação de Envio, porém sem nenhuma atribuição específica de ministério ativo sinalizada.</p>
                 </div>
               </div>
@@ -683,7 +766,7 @@ export default function VisaoGeralPastorPage() {
         </div>
       )}
 
-      {/* TABELA MACROSCÓPICA DA JORNADA (ATUALIZADA COM AS DESCRIÇÕES SOLICITADAS) */}
+      {/* TABELA MACROSCÓPICA DA JORNADA */}
       {filtroRelatorio === 'consolidacao' && (
         <div className="bg-white border border-slate-200 rounded-xl overflow-hidden print:border-slate-400">
           <div className="p-4 bg-slate-50 border-b font-black text-slate-700 text-xs uppercase tracking-wider print:bg-white">
@@ -743,7 +826,7 @@ export default function VisaoGeralPastorPage() {
         </div>
       )}
 
-      {/* Rodapé e Assinatura para Impressão */}
+      {/* Rodapé para Impressão */}
       <div className="hidden print:flex justify-between items-center pt-16 text-xxs font-bold text-slate-400 border-t border-dashed border-slate-300 mt-12">
         <div>
           <p className="border-t border-slate-400 w-48 text-center pt-1 text-slate-700">Assinatura do Pastor Titular</p>
