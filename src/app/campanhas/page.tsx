@@ -38,13 +38,26 @@ type Pessoa = {
 }
 
 const templates = {
-  culto: 'Olá [nome], graça e paz! 🙏 Domingo teremos nosso Culto da Família às 18h. Será uma alegria receber você 💙',
-  cafe: 'Olá [nome]! ☕ Queremos te convidar para nosso Café de Integração. Será uma alegria receber você!',
-  integracao: 'Olá [nome]! Estamos felizes com sua caminhada conosco 💙 Conte com a IPI Cascavel.',
-  sala_novos: 'Olá [nome]! Temos um próximo encontro da Sala de Novos. Você é muito bem-vindo 🙌',
-  oracao: 'Olá [nome], estamos em oração por você 🙏 Se precisar, conte conosco.',
-  evento: 'Olá [nome]! Temos um evento especial na igreja e queremos muito sua presença 💙',
-  avisos: 'Olá [nome]! Passando para compartilhar um aviso importante da igreja.'
+  culto:
+    'Olá [nome], graça e paz! 🙏 Domingo teremos nosso Culto da Família às 18h. Será uma alegria receber você.',
+
+  oracao:
+    'Olá [nome], estamos em oração por você. Se precisar conversar ou receber apoio pastoral, conte conosco.',
+
+  evento:
+    'Olá [nome]! Teremos uma programação especial nesta semana e gostaríamos muito de contar com sua presença.',
+
+  avisos:
+    'Olá [nome]! Passando para compartilhar um comunicado importante da igreja.',
+
+  jovens:
+    'Olá [nome]! Os jovens estarão reunidos nesta semana. Esperamos você.',
+
+  mulheres:
+    'Olá [nome]! Nosso encontro de mulheres acontecerá em breve. Será uma alegria recebê-la.',
+
+  homens:
+    'Olá [nome]! Nosso encontro de homens está chegando. Reserve sua agenda.',
 }
 
 function normalizar(texto: string | null) {
@@ -254,26 +267,70 @@ export default function CampanhasPage() {
     setIndiceLoteAtual(0)
   }
 
-  return (
-    <div className="max-w-7xl mx-auto space-y-8 p-4 sm:p-6 lg:p-8 bg-slate-50/50 min-h-screen">
-      <div className="border-b border-slate-200 pb-5">
-        <h1 className="text-3xl font-black text-slate-900 flex items-center gap-3 tracking-tight">
-          <div className="bg-blue-600 p-2 rounded-2xl text-white shadow-sm shadow-blue-600/20">
-            <MessageSquare size={24} />
-          </div>
+ return (
+  <div className="max-w-7xl mx-auto space-y-8 p-4 sm:p-6 lg:p-8 bg-slate-50/50 min-h-screen">
+
+    <div className="border-b border-slate-200 pb-5">
+
+      <div className="flex items-center gap-4">
+        <div className="bg-blue-600 p-2 rounded-2xl text-white shadow-sm shadow-blue-600/20">
+          <MessageSquare size={24} />
+        </div>
+
+        <h1 className="text-4xl font-black text-slate-900">
           Central de Comunicação
         </h1>
-        <p className="text-slate-500 mt-2 text-sm font-medium">
-          Filtragem inteligente de membros e envio direcionado via WhatsApp.
-        </p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-8 items-start">
-        <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200/60 space-y-5 lg:sticky lg:top-6">
-          <h2 className="font-bold flex gap-2 items-center text-slate-800 text-xs uppercase tracking-wider border-b border-slate-100 pb-3">
-            <Filter size={16} className="text-slate-400" />
-            Segmentação de Público
-          </h2>
+      <p className="text-slate-500 mt-2">
+        Comunicação estratégica com visitantes, frequentadores e membros da IPI Cascavel.
+      </p>
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
+
+        <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+          <p className="text-xs uppercase font-black text-slate-500">
+            Público Total
+          </p>
+          <h3 className="text-3xl font-black text-slate-900 mt-2">
+            {pessoas.length}
+          </h3>
+        </div>
+
+        <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+          <p className="text-xs uppercase font-black text-blue-600">
+            Filtrados
+          </p>
+          <h3 className="text-3xl font-black text-blue-600 mt-2">
+            {pessoasFiltradas.length}
+          </h3>
+        </div>
+
+        <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+          <p className="text-xs uppercase font-black text-emerald-600">
+            Enviados
+          </p>
+          <h3 className="text-3xl font-black text-emerald-600 mt-2">
+            {enviados.length}
+          </h3>
+        </div>
+
+        <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+          <p className="text-xs uppercase font-black text-amber-600">
+            Pendentes
+          </p>
+          <h3 className="text-3xl font-black text-amber-600 mt-2">
+            {alvosPendentes.length}
+          </h3>
+        </div>
+
+      </div>
+
+        </div>
+
+    <div className="grid lg:grid-cols-4 gap-6">
+
+      <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200/60 space-y-5 lg:sticky lg:top-6">
 
           <div className="space-y-3.5">
             <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar por nome..." disabled={disparandoLote} className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 bg-slate-50/50 placeholder-slate-400 font-medium disabled:opacity-50" />
@@ -284,13 +341,17 @@ export default function CampanhasPage() {
               <option value="mulheres">Mulheres</option>
             </select>
 
-            <select value={grupoFiltro} onChange={(e) => setGrupoFiltro(e.target.value)} disabled={disparandoLote} className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm bg-white outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 text-slate-700 font-medium disabled:opacity-50">
-              <option value="todos">Todos os grupos</option>
-              <option value="VISITANTES">Visitantes</option>
-              <option value="FREQUENTADORES">Frequentadores</option>
-              <option value="SALA_NOVOS">Sala de Novos</option>
-              <option value="MEMBROS">Membros</option>
-            </select>
+            <select
+  value={grupoFiltro}
+  onChange={(e) => setGrupoFiltro(e.target.value)}
+  disabled={disparandoLote}
+  className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm bg-white outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 text-slate-700 font-medium disabled:opacity-50"
+>
+  <option value="todos">Todos os públicos</option>
+  <option value="VISITANTES">Visitantes</option>
+  <option value="FREQUENTADORES">Frequentadores</option>
+  <option value="MEMBROS">Membros</option>
+</select>
 
             <select value={cidadeFiltro} onChange={(e) => setCidadeFiltro(e.target.value)} disabled={disparandoLote} className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm bg-white outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 text-slate-700 font-medium disabled:opacity-50">
               <option value="todos">Todas as cidades</option>
@@ -340,7 +401,6 @@ export default function CampanhasPage() {
               ))}
             </div>
           </div>
-
           <div className="space-y-1">
             <textarea
               value={mensagem}
@@ -417,7 +477,7 @@ export default function CampanhasPage() {
                   return (
                     <div
                       key={pessoa.id}
-                      className="border border-slate-100 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white hover:bg-slate-50/50 hover:border-slate-200/80 transition duration-150 shadow-2xs"
+                      className="bg-slate-50 hover:bg-white border border-slate-200 rounded-2xl p-4 shadow-sm hover:shadow-md transition-all"
                     >
                       <div className="space-y-1">
                         <div className="font-bold text-slate-900 tracking-tight text-base">{pessoa.nome}</div>
