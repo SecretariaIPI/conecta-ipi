@@ -1,6 +1,9 @@
-import { redirect } from 'next/navigation';
+import LoginForm from './login/LoginForm'
 
-export default function RootPage() {
-  // Redireciona a URL raiz para a sua pasta organizada
-  redirect('/paginaboasvindas');
+export default function Page() {
+  return (
+    <div className="flex justify-center items-center min-h-screen">
+      <LoginForm />
+    </div>
+  )
 }

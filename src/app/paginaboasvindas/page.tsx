@@ -1,10 +1,26 @@
-'use client'
-
+import { createServerClient } from '@supabase/ssr'
+import { cookies } from 'next/headers'
+import { redirect } from 'next/navigation'
+import LoginForm from '../login/LoginForm'
 import Link from 'next/link'
 
-export default function DashboardPage() {
+export default async function BoasVindasPage() {
+  const cookieStore = await cookies()
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) {
+          return cookieStore.get(name)?.value
+        },
+      },
+    }
+  )
+  const { data: { session } } = await supabase.auth.getSession()
+
   return (
-    <div className="h-full flex flex-col justify-center items-center p-8 animate-in fade-in duration-700">
+    <div className="h-full min-h-screen flex flex-col justify-center items-center p-8 bg-slate-50">
       <div className="max-w-xl w-full text-center space-y-10">
         
         {/* Identidade Central */}
@@ -21,33 +37,29 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Mensagem de Boas-Vindas */}
+        {/* Lógica de Autenticação */}
         <div className="bg-white border border-slate-200 rounded-3xl p-10 shadow-xl shadow-slate-200/50">
-          <h2 className="text-2xl font-black text-slate-900 mb-4"> Bem-vindo ao Centro de Operações.</h2>
-          <p className="text-slate-600 leading-relaxed mb-8">
-            Cada pessoa que chega é uma oportunidade para revelar Cristo através da Palavra, Poder e Provisão. Utilize esta plataforma para acompanhar a jornada de integração, discipulado e envio.
-          </p>
-
-          <Link 
-            href="/dashboard/pastor/visao-geral" 
-            className="inline-flex items-center gap-2 bg-[#07111F] text-white px-8 py-4 rounded-2xl font-bold hover:bg-slate-900 transition-all shadow-lg hover:shadow-blue-500/20"
-          >
-            Acessar Centro de Operações
-          </Link>
+          {!session ? (
+            <>
+              <h2 className="text-xl font-black text-slate-900 mb-6">Acesso Restrito</h2>
+              <LoginForm />
+            </>
+          ) : (
+            <>
+              <h2 className="text-2xl font-black text-slate-900 mb-4">Bem-vindo ao Centro de Operações.</h2>
+              <p className="text-slate-600 leading-relaxed mb-8">
+                Sua jornada pastoral continua. Utilize esta plataforma para acompanhar a integração, discipulado e envio.
+              </p>
+              <Link 
+                href="/dashboard/pastor/visao-geral" 
+                className="inline-flex items-center gap-2 bg-[#07111F] text-white px-8 py-4 rounded-2xl font-bold hover:bg-slate-900 transition-all shadow-lg hover:shadow-blue-500/20"
+              >
+                Ir para o Painel
+              </Link>
+            </>
+          )}
         </div>
 
-<div className="pt-6">
-  <div className="
-    w-24 h-px
-    bg-gradient-to-r
-    from-transparent
-    via-cyan-400
-    to-transparent
-    mx-auto
-  " />
-</div>
-
-        {/* Rodapé Inspiracional */}
         <p className="text-[10px] text-slate-400 uppercase tracking-widest font-bold">
           Revelando Cristo através da Palavra, Poder e Provisão.
         </p>
