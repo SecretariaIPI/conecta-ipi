@@ -517,52 +517,6 @@ export default function VisaoGeralPastorPage() {
 
 </div>
 {/* fim do grid de cards */}
-{/* Atenção Pastoral */}
-      {filtroRelatorio === 'geral' && atencaoPastoral.length > 0 && (
-        <div className="bg-white border border-rose-200 rounded-3xl p-6 shadow-sm">
-          <div className="flex items-center gap-3 mb-5">
-            <div className="bg-rose-100 p-3 rounded-xl">
-              <ShieldAlert size={20} className="text-rose-600" />
-            </div>
-            <div>
-              <h3 className="text-sm font-black uppercase tracking-wider text-slate-800">
-                Atenção Pastoral Imediata
-              </h3>
-              <p className="text-xs text-slate-500">
-                Pessoas sem acompanhamento recente.
-              </p>
-            </div>
-          </div>
-          <div className="space-y-3">
-            {atencaoPastoral.slice(0, 10).map((item) => (
-              <div
-                key={item.pessoa_id}
-                className="flex items-center justify-between border rounded-xl p-4"
-              >
-                <div>
-                  <p className="font-bold text-slate-800">
-                    {item.pessoa?.nome}
-                  </p>
-                  <p className="text-xs text-slate-500">
-                    {item.dias} dias sem contato
-                  </p>
-                </div>
-                <div className="text-right">
-                  <p className="text-xs font-bold text-rose-600">
-                    {item.etapa}
-                  </p>
-                  <Link
-                    href={`/pessoas/${item.pessoa_id}`}
-                    className="text-xs text-blue-600 hover:underline"
-                  >
-                    Abrir ficha
-                  </Link>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* GRÁFICO HISTÓRICO DE TENDÊNCIA MENSAL */}
       {filtroRelatorio === 'geral' && (
